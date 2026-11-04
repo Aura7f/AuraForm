@@ -19,16 +19,25 @@ import { validateFormSubmission, isValidEmail } from '../../utils/validation';
 interface FormResponderViewProps {
   formId: string;
   onBack: () => void;
+  onRequestSignIn: () => void;
 }
 
 export const FormResponderView: React.FC<FormResponderViewProps> = ({
   formId,
-  onBack
+  onBack,
+  onRequestSignIn
 }) => {
   const { user } = useAuth();
   const { showToast } = useToast();
   const [form, setForm] = useState<Form | null>(null);
-  const [answers, setAnswers] = useState<Record<string, any>>({});
+  const [answers, setAnswers] = useState<Record<string, any>>(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem(`auraform-response-draft-${formId}`) || '{}');
+    } catch (err) {
+      console.error('Failed to restore response draft:', err);
+      return {};
+    }
+  });
   const [participantName, setParticipantName] = useState('');
   const [participantEmail, setParticipantEmail] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -39,6 +48,14 @@ export const FormResponderView: React.FC<FormResponderViewProps> = ({
   useEffect(() => {
     loadForm();
   }, [formId]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(`auraform-response-draft-${formId}`, JSON.stringify(answers));
+    } catch (err) {
+      console.error('Failed to save response draft:', err);
+    }
+  }, [answers, formId]);
 
   useEffect(() => {
     if (user) {
@@ -91,6 +108,10 @@ export const FormResponderView: React.FC<FormResponderViewProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form) return;
+    if (!user) {
+      showToast('Sign in with Google before submitting a response.', 'error');
+      return;
+    }
 
     const newErrors: Record<string, string> = {};
 
@@ -133,6 +154,7 @@ export const FormResponderView: React.FC<FormResponderViewProps> = ({
       );
 
       if (result.success) {
+        sessionStorage.removeItem(`auraform-response-draft-${formId}`);
         setSubmitted(true);
         showToast('Response recorded successfully!', 'success');
       } else {
@@ -194,7 +216,7 @@ export const FormResponderView: React.FC<FormResponderViewProps> = ({
           <span>Back</span>
         </button>
         <span className="text-[11px] font-medium text-slate-400">
-          Powered by <strong className="text-slate-700">FormFlow</strong>
+          Powered by <strong className="text-slate-700">AuraForm</strong>
         </span>
       </div>
 
@@ -266,6 +288,19 @@ export const FormResponderView: React.FC<FormResponderViewProps> = ({
       ) : (
         /* FORM RESPONDER VIEW */
         <form onSubmit={handleSubmit} className="space-y-4">
+          {!user && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <p className="text-xs text-amber-900">Sign in with Google to submit your response. Your answers will be restored after sign-in.</p>
+              <button
+                type="button"
+                onClick={onRequestSignIn}
+                className="shrink-0 px-3 py-2 bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold rounded-lg"
+              >
+                Sign in with Google
+              </button>
+            </div>
+          )}
+
           {/* Header Card */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 sm:p-8 border-t-8 border-t-teal-600 space-y-3">
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
@@ -331,7 +366,8 @@ export const FormResponderView: React.FC<FormResponderViewProps> = ({
                     type="email"
                     required
                     value={participantEmail}
-                    onChange={e => setParticipantEmail(e.target.value)}
+                  readOnly={Boolean(user)}
+                  onChange={e => setParticipantEmail(e.target.value)}
                     placeholder="your.email@college.edu"
                     className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none"
                   />

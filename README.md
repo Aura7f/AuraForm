@@ -1,6 +1,6 @@
-# FormFlow Pro — Google Forms-Inspired Web Application
+# AuraForm — Google Forms-Inspired Web Application
 
-**FormFlow** is a modern, responsive full-stack web application designed for creating and managing surveys, evaluations, event registrations, workshops, seminars, and university/college activities.
+**AuraForm** is a modern, responsive full-stack web application designed for creating and managing surveys, evaluations, event registrations, workshops, seminars, and university/college activities.
 
 Built with **React 18**, **TypeScript**, **Tailwind CSS**, and **Supabase (PostgreSQL 15+, Auth, Realtime & RLS)** with a high-performance offline/local fallback.
 
@@ -77,7 +77,7 @@ Built with **React 18**, **TypeScript**, **Tailwind CSS**, and **Supabase (Postg
 
 ### 1. Start Development Server
 
-FormFlow is already installed and built in this directory. To launch the server:
+AuraForm is already installed and built in this directory. To launch the server:
 
 ```bash
 npm run dev
@@ -96,28 +96,22 @@ npm run build
 
 ## 🗄️ Supabase Setup & Security Architecture
 
-FormFlow is connected to Supabase with airtight PostgreSQL Row Level Security (RLS) policies and Role-Based Access Control (RBAC):
+AuraForm is connected to Supabase with airtight PostgreSQL Row Level Security (RLS) policies and Role-Based Access Control (RBAC):
 
-### Primary Administrator
-- **Designated Admin Account**: `arujagadeesh801@gmail.com`
-- **Security Rule**: The `admin` role is **never** granted directly by client requests. Instead, it is provisioned through a trusted database/server-side trigger (`handle_user_verification` / `handle_new_user`) only after the email address is verified in Supabase Auth.
-- **Organizer Role**: All other user registrations automatically receive the `organizer` role, granting them permission to create and manage their own forms and invited collaborations.
+### Authentication and roles
+- **Sign-in:** A dedicated `/signin` page with Supabase email/password sign-in and account creation. Form links are preserved through sign-in.
+- **Single administrator:** Only the verified account `arujagadeesh801@gmail.com` receives the `admin` role.
+- **Organizers:** New accounts are regular `user` accounts. The admin can assign or remove organizer access from the dashboard's **Member access** panel.
+- **Responders:** Authenticated users can submit responses to published public forms. They cannot create, edit, or manage forms.
+- Role checks are enforced by Supabase Row Level Security and a role-management database function, not only by the UI.
 
-### Manual Supabase Setup Checklist Before Making Changes:
-1. **Email Confirmation Setting**:
-   - Navigate to Supabase Dashboard > **Authentication** > **Providers** > **Email**.
-   - If "Confirm email" is **ON**, register `arujagadeesh801@gmail.com` and click the verification link sent to your inbox to activate Admin status.
-   - If "Confirm email" is **OFF**, the database trigger immediately assigns `admin` upon registration.
-2. **Apply Database Migration**:
-   - Open Supabase Dashboard > **SQL Editor**.
-   - Run [`supabase/migrations/002_secure_admin_and_rls.sql`](file:///root/supabase/migrations/002_secure_admin_and_rls.sql).
-   - This migration is non-destructive and idempotent: it preserves all existing forms, questions, responses, and registrations.
-3. **Manual Promotion Helper** (if account existed prior to trigger):
-   ```sql
-   SELECT public.promote_designated_admin('arujagadeesh801@gmail.com');
-   ```
-4. **Environment Variables**:
-   - In `/root/.env`, verify `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set.
+### Supabase setup
+1. In Supabase, open **Authentication > Providers > Email** and enable email/password sign-in and sign-ups. Configure email confirmation as desired.
+2. In Supabase **Authentication > URL Configuration**, add `http://localhost:5173` and your deployed app URL to the allowed redirect URLs for email confirmation.
+3. Open Supabase **SQL Editor** and run `supabase/migrations/002_secure_admin_and_rls.sql`, followed by `supabase/migrations/003_google_auth_and_member_roles.sql` and `supabase/migrations/004_fix_verified_admin_promotion.sql`.
+   - Run migration 003 only once: it defaults existing non-admin accounts to regular users; the designated administrator can assign organizer roles afterward.
+   - If migration 003 was already applied, do not run it again; run migration 004 to apply the admin-confirmation fix.
+4. In the `FormFlow-main/.env` file, set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, then restart the Vite server.
 
 ---
 

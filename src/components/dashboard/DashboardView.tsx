@@ -26,9 +26,11 @@ import { Form, UserProfile } from '../../types';
 import { formService } from '../../services/formService';
 import { useToast } from '../../context/ToastContext';
 import { isSupabaseConfigured } from '../../lib/supabase';
+import { MemberManagement } from './MemberManagement';
 
 interface DashboardViewProps {
   forms: Form[];
+  loadError: string | null;
   currentUser: UserProfile | null;
   onOpenFormBuilder: (formId: string) => void;
   onOpenFormResponder: (formId: string) => void;
@@ -39,6 +41,7 @@ interface DashboardViewProps {
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   forms,
+  loadError,
   currentUser,
   onOpenFormBuilder,
   onOpenFormResponder,
@@ -51,6 +54,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [filterType, setFilterType] = useState<'all' | 'published' | 'draft' | 'closed' | 'events'>('all');
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [seeding, setSeeding] = useState(false);
+  const canManageForms = currentUser?.role === 'admin' || currentUser?.role === 'organizer';
 
   const handleSeedStarterForms = async () => {
     if (!currentUser) return;
@@ -140,7 +144,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </p>
         </div>
 
-        {currentUser && (
+        {canManageForms && (
           <div className="flex items-center gap-2.5 self-start sm:self-auto flex-wrap">
             {currentUser.role === 'admin' && isSupabaseConfigured() && (
               <button
@@ -164,6 +168,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         )}
       </div>
+
+      {loadError && (
+        <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          Could not load forms from the database: {loadError}
+        </div>
+      )}
+
+      {currentUser?.role === 'admin' && <MemberManagement />}
 
       {/* Metrics Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -262,7 +274,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               ? `No forms match your search query "${searchQuery}". Try clearing the search filter.`
               : 'No forms are currently available under this category.'}
           </p>
-          {currentUser && (
+          {canManageForms && (
             <button
               onClick={onOpenNewFormModal}
               className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs rounded-lg transition"
@@ -274,10 +286,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredForms.map(form => {
-            const isOwnerOrEditor =
-              currentUser?.role === 'admin' ||
-              form.createdBy === currentUser?.id ||
-              form.collaborators?.some(c => c.userEmail === currentUser?.email || c.userId === currentUser?.id);
+            const isOwnerOrEditor = Boolean(
+              canManageForms && (
+                currentUser?.role === 'admin' ||
+                form.createdBy === currentUser?.id ||
+                form.collaborators?.some(c =>
+                  c.role === 'editor' &&
+                  (c.userEmail === currentUser?.email || c.userId === currentUser?.id)
+                )
+              )
+            );
 
             return (
               <div

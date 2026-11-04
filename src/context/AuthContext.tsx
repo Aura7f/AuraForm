@@ -1,81 +1,54 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { UserProfile, UserRole } from '../types';
+import { UserProfile } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { INITIAL_PROFILES } from '../lib/mockData';
-import { generateUUID } from '../utils/uuid';
 
 export const DESIGNATED_ADMIN_EMAIL = 'arujagadeesh801@gmail.com';
 
 interface AuthContextType {
   user: UserProfile | null;
   loading: boolean;
+  authError: string | null;
   isSupabaseLive: boolean;
   isRealSession: boolean;
-  signIn: (email: string, password?: string) => Promise<void>;
-  signUp: (email: string, password?: string, fullName?: string, role?: UserRole) => Promise<{ needsConfirmation?: boolean }>;
+  signInWithEmailPassword: (email: string, password: string) => Promise<void>;
+  signUpWithEmailPassword: (email: string, password: string, fullName: string) => Promise<boolean>;
+  signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
-  switchDemoUser: (user: UserProfile | null) => void;
-  availableDemoUsers: UserProfile[];
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Default to Alex Rivera (Organizer) for demo testing unless an active user was saved
-  const [user, setUser] = useState<UserProfile | null>(() => {
-    const saved = localStorage.getItem('formflow_active_user');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // fallback
-      }
-    }
-    return INITIAL_PROFILES[1];
-  });
+  const [user, setUser] = useState<UserProfile | null>(null);
 
   const [loading, setLoading] = useState<boolean>(true);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [isRealSession, setIsRealSession] = useState<boolean>(false);
   const isSupabaseLive = isSupabaseConfigured();
 
   const fetchSupabaseProfile = useCallback(async (userId: string, email: string) => {
-    if (!supabase) return;
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+    if (!supabase) throw new Error('Supabase authentication is not configured.');
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
 
-      if (error || !data) {
-        // Default new or un-synced user to organizer
-        const fallbackUser: UserProfile = {
-          id: userId,
-          email,
-          fullName: email.split('@')[0],
-          role: 'organizer'
-        };
-        setUser(fallbackUser);
-        setIsRealSession(true);
-        localStorage.setItem('formflow_active_user', JSON.stringify(fallbackUser));
-      } else {
-        const liveUser: UserProfile = {
-          id: data.id,
-          email: data.email,
-          fullName: data.full_name || data.email,
-          role: data.role,
-          avatarUrl: data.avatar_url
-        };
-        setUser(liveUser);
-        setIsRealSession(true);
-        localStorage.setItem('formflow_active_user', JSON.stringify(liveUser));
-      }
-    } catch (err) {
-      console.error('Failed to fetch user profile:', err);
-    } finally {
-      setLoading(false);
-    }
+    if (error) throw error;
+    if (!data) throw new Error(`No AuraForm profile exists for ${email}. Apply the latest Supabase migration.`);
+
+    const liveUser: UserProfile = {
+      id: data.id,
+      email: data.email,
+      fullName: data.full_name || data.email,
+      role: data.role,
+      avatarUrl: data.avatar_url
+    };
+    setUser(liveUser);
+    setAuthError(null);
+    setIsRealSession(true);
+    setLoading(false);
   }, []);
 
   const refreshUser = useCallback(async () => {
@@ -89,6 +62,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     let mounted = true;
+    let profileLoadTimer: number | undefined;
     if (isSupabaseLive && supabase) {
       // Safety timeout to ensure loading never hangs on slow networks
       const safetyTimer = setTimeout(() => {
@@ -100,9 +74,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!mounted) return;
         clearTimeout(safetyTimer);
         if (session?.user) {
-          fetchSupabaseProfile(session.user.id, session.user.email || '');
+          fetchSupabaseProfile(session.user.id, session.user.email || '').catch((err) => {
+            console.error('Failed to load authenticated profile:', err);
+            setAuthError(err instanceof Error ? err.message : 'Failed to load your AuraForm profile.');
+            setUser(null);
+            setLoading(false);
+          });
         } else {
           setIsRealSession(false);
+          setUser(null);
           setLoading(false);
         }
       }).catch((err) => {
@@ -115,11 +95,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
         if (!mounted) return;
         if (session?.user) {
-          fetchSupabaseProfile(session.user.id, session.user.email || '');
+          window.clearTimeout(profileLoadTimer);
+          profileLoadTimer = window.setTimeout(() => {
+            if (!mounted) return;
+            fetchSupabaseProfile(session.user.id, session.user.email || '').catch((err) => {
+              console.error('Failed to load authenticated profile:', err);
+              setAuthError(err instanceof Error ? err.message : 'Failed to load your AuraForm profile.');
+              setUser(null);
+              setLoading(false);
+            });
+          }, 0);
         } else if (event === 'SIGNED_OUT') {
           setIsRealSession(false);
           setUser(null);
-          localStorage.removeItem('formflow_active_user');
+          setAuthError(null);
           setLoading(false);
         } else {
           setLoading(false);
@@ -129,6 +118,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return () => {
         mounted = false;
         clearTimeout(safetyTimer);
+        window.clearTimeout(profileLoadTimer);
         subscription.unsubscribe();
       };
     } else {
@@ -136,77 +126,53 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [isSupabaseLive, fetchSupabaseProfile]);
 
-  const signIn = async (email: string, password = 'password123') => {
-    if (isSupabaseLive && supabase) {
-      const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-      if (error) throw error;
-      if (data?.user) {
-        await fetchSupabaseProfile(data.user.id, data.user.email || email);
-      }
-      return;
+  const signInWithEmailPassword = async (email: string, password: string) => {
+    setAuthError(null);
+    if (!isSupabaseLive || !supabase) {
+      throw new Error('Sign-in requires valid Supabase credentials in the project .env file.');
     }
-
-    // Local mode
-    const matched = INITIAL_PROFILES.find(p => p.email.toLowerCase() === email.trim().toLowerCase());
-    if (matched) {
-      setUser(matched);
-      setIsRealSession(false);
-      localStorage.setItem('formflow_active_user', JSON.stringify(matched));
-    } else {
-      const isDesignated = email.trim().toLowerCase() === DESIGNATED_ADMIN_EMAIL.toLowerCase();
-      const newUser: UserProfile = {
-        id: generateUUID(),
-        email: email.trim(),
-        fullName: email.split('@')[0],
-        role: isDesignated ? 'admin' : 'organizer'
-      };
-      setUser(newUser);
-      setIsRealSession(false);
-      localStorage.setItem('formflow_active_user', JSON.stringify(newUser));
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password
+    });
+    if (error) throw error;
+    if (data.user) {
+      await fetchSupabaseProfile(data.user.id, data.user.email || email.trim());
     }
   };
 
-  const signUp = async (
-    email: string,
-    password = 'password123',
-    fullName = 'Organizer',
-    _requestedRole: UserRole = 'organizer'
-  ): Promise<{ needsConfirmation?: boolean }> => {
-    const cleanEmail = email.trim().toLowerCase();
-
-    if (isSupabaseLive && supabase) {
-      // Role is NEVER passed by client - backend PostgreSQL trigger strictly controls assignment.
-      const { data, error } = await supabase.auth.signUp({
-        email: cleanEmail,
-        password,
-        options: {
-          data: {
-            full_name: fullName.trim()
-          }
-        }
-      });
-      if (error) throw error;
-
-      const needsConfirmation = !data.session;
-      if (data.user && data.session) {
-        await fetchSupabaseProfile(data.user.id, data.user.email || cleanEmail);
-      }
-
-      return { needsConfirmation };
+  const signUpWithEmailPassword = async (email: string, password: string, fullName: string) => {
+    setAuthError(null);
+    if (!isSupabaseLive || !supabase) {
+      throw new Error('Account creation requires valid Supabase credentials in the project .env file.');
     }
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim().toLowerCase(),
+      password,
+      options: {
+        data: { full_name: fullName.trim() },
+        emailRedirectTo: window.location.href
+      }
+    });
+    if (error) throw error;
+    if (data.session && data.user) {
+      await fetchSupabaseProfile(data.user.id, data.user.email || email.trim());
+    }
+    return !data.session;
+  };
 
-    // Local mode
-    const isDesignated = cleanEmail === DESIGNATED_ADMIN_EMAIL.toLowerCase();
-    const newUser: UserProfile = {
-      id: generateUUID(),
-      email: cleanEmail,
-      fullName: fullName.trim() || cleanEmail.split('@')[0],
-      role: isDesignated ? 'admin' : 'organizer'
-    };
-    setUser(newUser);
-    setIsRealSession(false);
-    localStorage.setItem('formflow_active_user', JSON.stringify(newUser));
-    return { needsConfirmation: false };
+  const signInWithGoogle = async () => {
+    setAuthError(null);
+    if (!isSupabaseLive || !supabase) {
+      throw new Error('Google sign-in requires valid Supabase credentials in the project .env file.');
+    }
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.href
+      }
+    });
+    if (error) throw error;
   };
 
   const signOut = async () => {
@@ -215,17 +181,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     setIsRealSession(false);
     setUser(null);
-    localStorage.removeItem('formflow_active_user');
-  };
-
-  const switchDemoUser = (demoUser: UserProfile | null) => {
-    setIsRealSession(false);
-    setUser(demoUser);
-    if (demoUser) {
-      localStorage.setItem('formflow_active_user', JSON.stringify(demoUser));
-    } else {
-      localStorage.removeItem('formflow_active_user');
-    }
+    setAuthError(null);
   };
 
   return (
@@ -233,14 +189,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         user,
         loading,
+        authError,
         isSupabaseLive,
         isRealSession,
-        signIn,
-        signUp,
+        signInWithEmailPassword,
+        signUpWithEmailPassword,
+        signInWithGoogle,
         signOut,
-        refreshUser,
-        switchDemoUser,
-        availableDemoUsers: INITIAL_PROFILES
+        refreshUser
       }}
     >
       {children}

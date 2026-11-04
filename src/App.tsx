@@ -6,36 +6,77 @@ import { DashboardView } from './components/dashboard/DashboardView';
 import { FormBuilderView } from './components/builder/FormBuilderView';
 import { FormResponderView } from './components/responder/FormResponderView';
 import { ResponsesView } from './components/responses/ResponsesView';
-import { AuthModal } from './components/auth/AuthModal';
+import { AuthPage } from './components/auth/AuthPage';
 import { NewFormModal } from './components/dashboard/NewFormModal';
-import { ConfigGuideModal } from './components/common/ConfigGuideModal';
 import { Form } from './types';
 import { formService } from './services/formService';
 
 type ViewMode = 'dashboard' | 'builder' | 'responder' | 'responses';
 
+const getRouteState = () => {
+  const currentUrl = new URL(window.location.href);
+  const isSignInPage = currentUrl.pathname.endsWith('/signin');
+  const routeUrl = isSignInPage
+    ? new URL(currentUrl.searchParams.get('next') || '/', window.location.origin)
+    : currentUrl;
+  const formId = routeUrl.searchParams.get('form');
+
+  return {
+    isSignInPage,
+    currentView: (formId ? 'responder' : 'dashboard') as ViewMode,
+    selectedFormId: formId
+  };
+};
+
 const FormFlowApp: React.FC = () => {
-  const { user } = useAuth();
-  const [currentView, setCurrentView] = useState<ViewMode>('dashboard');
-  const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
+  const { user, authError } = useAuth();
+  const [initialRoute] = useState(getRouteState);
+  const [isSignInPage, setIsSignInPage] = useState(initialRoute.isSignInPage);
+  const [currentView, setCurrentView] = useState<ViewMode>(initialRoute.currentView);
+  const [selectedFormId, setSelectedFormId] = useState<string | null>(initialRoute.selectedFormId);
   const [activeForm, setActiveForm] = useState<Form | null>(null);
   const [forms, setForms] = useState<Form[]>([]);
   const [loading, setLoading] = useState(true);
+  const [formsError, setFormsError] = useState<string | null>(null);
 
-  // Modals
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isNewFormModalOpen, setIsNewFormModalOpen] = useState(false);
-  const [isConfigGuideOpen, setIsConfigGuideOpen] = useState(false);
 
-  // Check URL query parameters (e.g. ?form=xxx for direct share links)
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const formParam = params.get('form');
-    if (formParam) {
-      setSelectedFormId(formParam);
-      setCurrentView('responder');
-    }
+    const handlePopState = () => {
+      const route = getRouteState();
+      setIsSignInPage(route.isSignInPage);
+      setCurrentView(route.currentView);
+      setSelectedFormId(route.selectedFormId);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+
+  const openSignInPage = () => {
+    const returnTo = isSignInPage
+      ? new URLSearchParams(window.location.search).get('next') || '/'
+      : `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    window.history.pushState({}, '', `/signin?next=${encodeURIComponent(returnTo)}`);
+    setIsSignInPage(true);
+  };
+
+  const returnFromSignInPage = () => {
+    const returnTo = new URLSearchParams(window.location.search).get('next') || '/';
+    const destination = new URL(returnTo, window.location.origin);
+    if (destination.origin !== window.location.origin) {
+      destination.href = window.location.origin;
+    }
+    const routePath = `${destination.pathname}${destination.search}${destination.hash}`;
+    window.history.replaceState({}, '', routePath);
+    setIsSignInPage(false);
+    const formId = destination.searchParams.get('form');
+    setSelectedFormId(formId);
+    setCurrentView(formId ? 'responder' : 'dashboard');
+  };
+
+  useEffect(() => {
+    if (user && isSignInPage) returnFromSignInPage();
+  }, [user, isSignInPage]);
 
   // Fetch forms whenever user or currentView changes
   useEffect(() => {
@@ -44,9 +85,16 @@ const FormFlowApp: React.FC = () => {
       setLoading(true);
       try {
         const data = await formService.getForms(user);
-        if (isMounted) setForms(data);
+        if (isMounted) {
+          setForms(data);
+          setFormsError(null);
+        }
       } catch (err) {
         console.error('Failed to load forms:', err);
+        if (isMounted) {
+          setForms([]);
+          setFormsError(err instanceof Error ? err.message : 'Failed to load forms from the database.');
+        }
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -62,14 +110,18 @@ const FormFlowApp: React.FC = () => {
     try {
       const data = await formService.getForms(user);
       setForms(data);
+      setFormsError(null);
     } catch (err) {
       console.error('Failed to load forms:', err);
+      setForms([]);
+      setFormsError(err instanceof Error ? err.message : 'Failed to load forms from the database.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleNavigate = (view: string, formId?: string) => {
+    setIsSignInPage(false);
     if (formId) setSelectedFormId(formId);
     setCurrentView(view as ViewMode);
     if (view === 'dashboard') {
@@ -89,21 +141,29 @@ const FormFlowApp: React.FC = () => {
   };
 
   const handleOpenResponder = (formId: string) => {
+    setIsSignInPage(false);
     setSelectedFormId(formId);
     setCurrentView('responder');
+    window.history.replaceState({}, '', `${window.location.pathname}?form=${encodeURIComponent(formId)}`);
   };
 
   const handleOpenResponses = (formId: string) => {
+    setIsSignInPage(false);
     setSelectedFormId(formId);
     setCurrentView('responses');
   };
 
   const handleFormCreated = (created: Form) => {
+    setIsSignInPage(false);
     setActiveForm(created);
     setSelectedFormId(created.id);
     setCurrentView('builder');
     loadForms();
   };
+
+  if (isSignInPage) {
+    return <AuthPage onBack={returnFromSignInPage} />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-['Inter',sans-serif]">
@@ -111,9 +171,7 @@ const FormFlowApp: React.FC = () => {
       <Navbar
         currentView={currentView}
         onNavigate={handleNavigate}
-        onOpenNewFormModal={() => setIsNewFormModalOpen(true)}
-        onOpenAuthModal={() => setIsAuthModalOpen(true)}
-        onOpenConfigGuide={() => setIsConfigGuideOpen(true)}
+        onOpenSignInPage={openSignInPage}
       />
 
       {/* Main Content Area */}
@@ -128,6 +186,7 @@ const FormFlowApp: React.FC = () => {
             {currentView === 'dashboard' && (
               <DashboardView
                 forms={forms}
+                loadError={formsError}
                 currentUser={user}
                 onOpenFormBuilder={handleOpenBuilder}
                 onOpenFormResponder={handleOpenResponder}
@@ -154,6 +213,7 @@ const FormFlowApp: React.FC = () => {
               <FormResponderView
                 formId={selectedFormId}
                 onBack={() => handleNavigate('dashboard')}
+                onRequestSignIn={openSignInPage}
               />
             )}
 
@@ -171,7 +231,7 @@ const FormFlowApp: React.FC = () => {
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-400">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <p>© 2026 FormFlow Pro. Enterprise Forms & Event Management.</p>
+          <p>© 2026 AuraForm. Enterprise Forms & Event Management.</p>
           <p className="flex items-center gap-2">
             <span>React + TypeScript + Vite</span>
             <span>•</span>
@@ -180,22 +240,12 @@ const FormFlowApp: React.FC = () => {
         </div>
       </footer>
 
-      {/* Global Modals */}
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-      />
-
       <NewFormModal
         isOpen={isNewFormModalOpen}
         onClose={() => setIsNewFormModalOpen(false)}
         onFormCreated={handleFormCreated}
       />
 
-      <ConfigGuideModal
-        isOpen={isConfigGuideOpen}
-        onClose={() => setIsConfigGuideOpen(false)}
-      />
     </div>
   );
 };

@@ -45,7 +45,7 @@ export const ConfigGuideModal: React.FC<ConfigGuideModalProps> = ({ isOpen, onCl
   if (!isOpen) return null;
 
   const envSample = `VITE_SUPABASE_URL=https://sxqioipucpsvvnbgpdpc.supabase.co
-VITE_SUPABASE_ANON_KEY=sb_publishable_rHVRxwvS7ri7H9yW2fDyeg_yFitfqad`;
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-or-publishable-key`;
 
   const promoteSqlSnippet = `-- Execute in Supabase SQL Editor to promote verified arujagadeesh801@gmail.com:
 SELECT public.promote_designated_admin('arujagadeesh801@gmail.com');`;
@@ -199,8 +199,8 @@ SELECT public.promote_designated_admin('arujagadeesh801@gmail.com');`;
                   </p>
                   <p className="text-xs mt-1 leading-relaxed">
                     {isConfigured
-                      ? 'FormFlow is configured with live Supabase credentials. Forms, questions, responses, and registrations connect with PostgreSQL Row Level Security (RLS).'
-                      : 'FormFlow is running in local reactive mode. Zero setup required to build forms and test RBAC.'}
+                      ? 'AuraForm is configured with live Supabase credentials. Forms, questions, responses, and registrations connect with PostgreSQL Row Level Security (RLS).'
+                      : 'AuraForm is running in local reactive mode. Zero setup required to build forms and test RBAC.'}
                   </p>
 
                   {/* Test Connection Button */}
@@ -370,7 +370,7 @@ SELECT public.promote_designated_admin('arujagadeesh801@gmail.com');`;
         {/* Modal Footer */}
         <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
           <p className="text-[11px] text-slate-400">
-            FormFlow Pro • Enterprise RBAC & Supabase Cloud
+            AuraForm • Enterprise RBAC & Supabase Cloud
           </p>
           <button
             onClick={onClose}

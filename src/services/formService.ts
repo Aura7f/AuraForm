@@ -60,113 +60,113 @@ const saveLocalResponses = (responses: FormResponse[]): void => {
 };
 
 export const formService = {
+  async listMembers(): Promise<UserProfile[]> {
+    if (!supabase || !isSupabaseConfigured()) {
+      throw new Error('Member management requires a configured Supabase connection.');
+    }
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, email, full_name, avatar_url, role')
+      .order('email');
+    if (error) throw error;
+    return (data || []).map(profile => ({
+      id: profile.id,
+      email: profile.email,
+      fullName: profile.full_name || profile.email,
+      avatarUrl: profile.avatar_url,
+      role: profile.role
+    }));
+  },
+
+  async setMemberRole(userId: string, role: 'organizer' | 'user'): Promise<void> {
+    if (!supabase || !isSupabaseConfigured()) {
+      throw new Error('Member role updates require a configured Supabase connection.');
+    }
+    const { error } = await supabase.rpc('set_member_role', {
+      target_user_id: userId,
+      target_role: role
+    });
+    if (error) throw error;
+  },
+
   // 1. Get Forms list according to user role
   async getForms(currentUser?: UserProfile | null): Promise<Form[]> {
-    if (isSupabaseConfigured() && supabase) {
-      try {
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Supabase query timed out')), 5000)
-        );
-
-        let query = supabase
-          .from('forms')
-          .select('*, questions(*), form_collaborators(*), profiles(id, email, full_name, avatar_url, role)');
-
-        if (currentUser?.role === 'admin') {
-          // Admin can see all forms via RLS
-        } else if (currentUser?.role === 'organizer') {
-          // Organizers see own forms or shared forms (or public published) via RLS
-        } else {
-          // General unauthenticated / respondent: only published public forms
-          query = query.eq('status', 'published').eq('is_public', true);
-        }
-
-        const { data, error }: any = await Promise.race([
-          query.order('created_at', { ascending: false }),
-          timeoutPromise
-        ]);
-
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-          return data.map((row: any) => ({
-            id: row.id,
-            title: row.title,
-            description: row.description || '',
-            createdBy: row.created_by,
-            creatorProfile: row.profiles ? {
-              id: row.profiles.id,
-              email: row.profiles.email,
-              fullName: row.profiles.full_name || row.profiles.email,
-              role: row.profiles.role,
-              avatarUrl: row.profiles.avatar_url
-            } : undefined,
-            status: row.status,
-            settings: {
-              isPublic: row.is_public,
-              requiresLogin: row.requires_login,
-              allowMultipleResponses: row.allow_multiple_responses,
-              responseLimit: row.response_limit,
-              deadline: row.deadline,
-              isEvent: row.is_event,
-              eventDate: row.event_date,
-              eventVenue: row.event_venue,
-              eventCapacity: row.event_capacity
-            },
-            questions: (row.questions || []).sort((a: any, b: any) => a.order_index - b.order_index).map((q: any) => ({
-              id: q.id,
-              formId: q.form_id,
-              title: q.title,
-              description: q.description,
-              type: q.type,
-              required: q.required,
-              orderIndex: q.order_index,
-              options: q.options || [],
-              scaleMin: q.scale_min,
-              scaleMax: q.scale_max,
-              scaleMinLabel: q.scale_min_label,
-              scaleMaxLabel: q.scale_max_label
-            })),
-            collaborators: (row.form_collaborators || []).map((c: any) => ({
-              id: c.id,
-              formId: c.form_id,
-              userId: c.user_id,
-              userEmail: c.user_email || 'collaborator@college.edu',
-              role: c.role
-            })),
-            createdAt: row.created_at,
-            updatedAt: row.updated_at
-          }));
-        }
-      } catch (err) {
-        console.warn('Supabase query failed or returned no items, falling back to local store:', err);
-      }
+    if (!isSupabaseConfigured() || !supabase) {
+      throw new Error('Forms can only be loaded from the database. Configure the Supabase connection to continue.');
     }
 
-    // Local / fallback store
-    const localForms = getLocalForms();
-    const responses = getLocalResponses();
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Supabase query timed out')), 5000)
+    );
 
-    // Attach real-time response count
-    const formsWithCounts = localForms.map(form => ({
-      ...form,
-      responseCount: responses.filter(r => r.formId === form.id).length
-    }));
+    let query = supabase
+      .from('forms')
+      .select('*, questions(*), form_collaborators(*), profiles(id, email, full_name, avatar_url, role)');
 
-    if (!currentUser) {
-      return formsWithCounts.filter(f => f.status === 'published' && f.settings.isPublic);
+    if (currentUser?.role !== 'admin' && currentUser?.role !== 'organizer') {
+      query = query.eq('status', 'published').eq('is_public', true);
     }
 
-    if (currentUser.role === 'admin') {
-      return formsWithCounts;
-    }
+    try {
+      const { data, error }: any = await Promise.race([
+        query.order('created_at', { ascending: false }),
+        timeoutPromise
+      ]);
 
-    // Organizer role
-    return formsWithCounts.filter(f => {
-      const isOwner = f.createdBy === currentUser.id;
-      const isCollab = f.collaborators?.some(c => c.userEmail === currentUser.email || c.userId === currentUser.id);
-      return isOwner || isCollab;
-    });
+      if (error) throw error;
+
+      return (data || []).map((row: any) => ({
+        id: row.id,
+        title: row.title,
+        description: row.description || '',
+        createdBy: row.created_by,
+        creatorProfile: row.profiles ? {
+          id: row.profiles.id,
+          email: row.profiles.email,
+          fullName: row.profiles.full_name || row.profiles.email,
+          role: row.profiles.role,
+          avatarUrl: row.profiles.avatar_url
+        } : undefined,
+        status: row.status,
+        settings: {
+          isPublic: row.is_public,
+          requiresLogin: row.requires_login,
+          allowMultipleResponses: row.allow_multiple_responses,
+          responseLimit: row.response_limit,
+          deadline: row.deadline,
+          isEvent: row.is_event,
+          eventDate: row.event_date,
+          eventVenue: row.event_venue,
+          eventCapacity: row.event_capacity
+        },
+        questions: (row.questions || []).sort((a: any, b: any) => a.order_index - b.order_index).map((q: any) => ({
+          id: q.id,
+          formId: q.form_id,
+          title: q.title,
+          description: q.description,
+          type: q.type,
+          required: q.required,
+          orderIndex: q.order_index,
+          options: q.options || [],
+          scaleMin: q.scale_min,
+          scaleMax: q.scale_max,
+          scaleMinLabel: q.scale_min_label,
+          scaleMaxLabel: q.scale_max_label
+        })),
+        collaborators: (row.form_collaborators || []).map((c: any) => ({
+          id: c.id,
+          formId: c.form_id,
+          userId: c.user_id,
+          userEmail: c.user_email || 'collaborator@college.edu',
+          role: c.role
+        })),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      }));
+    } catch (err) {
+      console.error('Failed to load forms from Supabase:', err);
+      throw err;
+    }
   },
 
   // 2. Get Single Form by ID
@@ -336,10 +336,12 @@ export const formService = {
             scale_min_label: q.scaleMinLabel,
             scale_max_label: q.scaleMaxLabel
           }));
-          await supabase.from('questions').insert(qInserts);
+          const { error: questionsError } = await supabase.from('questions').insert(qInserts);
+          if (questionsError) throw questionsError;
         }
       } catch (err) {
-        console.warn('Supabase create failed, persisting locally:', err);
+        console.error('Supabase form creation failed:', err);
+        throw err;
       }
     }
 
@@ -367,7 +369,7 @@ export const formService = {
 
     if (isSupabaseConfigured() && supabase && isValidUUID(id)) {
       try {
-        await supabase
+        const { error: updateError } = await supabase
           .from('forms')
           .update({
             title: updatedForm.title,
@@ -385,11 +387,13 @@ export const formService = {
             updated_at: updatedForm.updatedAt
           })
           .eq('id', id);
+        if (updateError) throw updateError;
 
         // Update questions if provided
         if (updates.questions) {
           // Delete old questions and replace
-          await supabase.from('questions').delete().eq('form_id', id);
+          const { error: deleteQuestionsError } = await supabase.from('questions').delete().eq('form_id', id);
+          if (deleteQuestionsError) throw deleteQuestionsError;
           if (updates.questions.length > 0) {
             const qInserts = updates.questions.map((q, idx) => ({
               id: isValidUUID(q.id) ? q.id : generateUUID(),
@@ -405,11 +409,13 @@ export const formService = {
               scale_min_label: q.scaleMinLabel,
               scale_max_label: q.scaleMaxLabel
             }));
-            await supabase.from('questions').insert(qInserts);
+            const { error: insertQuestionsError } = await supabase.from('questions').insert(qInserts);
+            if (insertQuestionsError) throw insertQuestionsError;
           }
         }
       } catch (err) {
-        console.warn('Supabase update failed, saving locally:', err);
+        console.error('Supabase form update failed:', err);
+        throw err;
       }
     }
 
@@ -447,9 +453,11 @@ export const formService = {
   async deleteForm(id: string): Promise<boolean> {
     if (isSupabaseConfigured() && supabase && isValidUUID(id)) {
       try {
-        await supabase.from('forms').delete().eq('id', id);
+        const { error } = await supabase.from('forms').delete().eq('id', id);
+        if (error) throw error;
       } catch (err) {
-        console.warn('Supabase delete failed:', err);
+        console.error('Supabase form deletion failed:', err);
+        throw err;
       }
     }
 
@@ -470,6 +478,13 @@ export const formService = {
     participantInfo?: { name?: string; email?: string },
     user?: UserProfile | null
   ): Promise<{ success: boolean; responseId?: string; error?: string }> {
+    if (!user) {
+      return { success: false, error: 'Sign in with Google before submitting a response.' };
+    }
+    if (!supabase || !isSupabaseConfigured() || !isValidUUID(formId) || !isValidUUID(user.id)) {
+      return { success: false, error: 'A valid authenticated Supabase account is required to submit responses.' };
+    }
+
     const form = await this.getFormById(formId);
     if (!form) return { success: false, error: 'Form not found' };
 
@@ -491,7 +506,7 @@ export const formService = {
       return { success: false, error: `This form has reached its maximum limit of ${form.settings.responseLimit} responses.` };
     }
 
-    const respondentEmail = participantInfo?.email || user?.email;
+    const respondentEmail = user.email;
     if (!form.settings.allowMultipleResponses && respondentEmail) {
       const alreadySubmitted = existing.some(r => r.respondentEmail?.toLowerCase() === respondentEmail.toLowerCase());
       if (alreadySubmitted) {
@@ -514,9 +529,8 @@ export const formService = {
       checkedInAt: null
     };
 
-    if (isSupabaseConfigured() && supabase && isValidUUID(formId)) {
-      try {
-        const { data: respData, error: respErr } = await supabase
+    try {
+        const { error: respErr } = await supabase
           .from('responses')
           .insert({
             id: newResponse.id,
@@ -539,12 +553,13 @@ export const formService = {
         }));
 
         if (answerEntries.length > 0) {
-          await supabase.from('answers').insert(answerEntries);
+          const { error: answersError } = await supabase.from('answers').insert(answerEntries);
+          if (answersError) throw answersError;
         }
 
         // Insert event registration if event
         if (form.settings.isEvent && participantInfo?.name && respondentEmail) {
-          await supabase.from('event_registrations').insert({
+          const { error: registrationError } = await supabase.from('event_registrations').insert({
             id: generateUUID(),
             form_id: formId,
             response_id: newResponse.id,
@@ -552,15 +567,15 @@ export const formService = {
             participant_email: respondentEmail,
             status: 'registered'
           });
+          if (registrationError) throw registrationError;
         }
-      } catch (err) {
-        console.warn('Supabase submission failed, storing locally:', err);
-      }
+    } catch (err) {
+      console.error('Supabase submission failed:', err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Supabase rejected the response.'
+      };
     }
-
-    // Save locally
-    const currentResp = getLocalResponses();
-    saveLocalResponses([newResponse, ...currentResp]);
 
     return { success: true, responseId };
   },
