@@ -170,8 +170,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {loadError && (
-        <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-          Could not load forms from the database: {loadError}
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 sm:flex-row sm:items-start sm:justify-between"
+        >
+          <div>
+            <p className="font-semibold">Could not load forms from the database</p>
+            <p className="mt-0.5">{loadError}</p>
+            <p className="mt-1 text-xs text-rose-600">
+              Check that the Supabase project is running and that the URL and API key configured in Vercel are correct.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onRefreshForms}
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 active:scale-95"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Retry
+          </button>
         </div>
       )}
 

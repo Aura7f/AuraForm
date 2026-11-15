@@ -14,6 +14,55 @@ import { generateUUID, isValidUUID } from '../utils/uuid';
 const STORAGE_KEY_FORMS = 'formflow_forms_v1';
 const STORAGE_KEY_RESPONSES = 'formflow_responses_v1';
 
+// Supabase queries normally complete in well under a second, but a paused or
+// cold project, a slow mobile network, or a large form list can take longer.
+// Keep a generous ceiling so healthy requests are not aborted too early.
+const DEFAULT_SUPABASE_TIMEOUT_MS = 15000;
+
+const getSupabaseTimeoutMs = (): number => {
+  const configured = Number(import.meta.env.VITE_SUPABASE_TIMEOUT_MS);
+  return Number.isFinite(configured) && configured >= 1000
+    ? configured
+    : DEFAULT_SUPABASE_TIMEOUT_MS;
+};
+
+const isAbortError = (err: unknown): boolean =>
+  typeof err === 'object' && err !== null && (err as { name?: string }).name === 'AbortError';
+
+const toSupabaseError = (error: { message?: string; details?: string; hint?: string }): Error =>
+  new Error(
+    [error.message, error.details, error.hint].filter(Boolean).join(' — ') ||
+      'Unknown Supabase error'
+  );
+
+/** Runs a Supabase request with a real abortable timeout and cleans up the timer. */
+const withSupabaseTimeout = async <T>(
+  request: (signal: AbortSignal) => PromiseLike<T>,
+  action: string
+): Promise<T> => {
+  const timeoutMs = getSupabaseTimeoutMs();
+  const controller = new AbortController();
+  let didTimeout = false;
+  const timer = window.setTimeout(() => {
+    didTimeout = true;
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    return await request(controller.signal);
+  } catch (err) {
+    if (didTimeout || isAbortError(err)) {
+      throw new Error(
+        `${action} timed out after ${Math.round(timeoutMs / 1000)}s. ` +
+          'Check that your Supabase project is active and that VITE_SUPABASE_URL is correct.'
+      );
+    }
+    throw err;
+  } finally {
+    window.clearTimeout(timer);
+  }
+};
+
 // Local Storage helpers
 const getLocalForms = (): Form[] => {
   try {
@@ -95,25 +144,26 @@ export const formService = {
       throw new Error('Forms can only be loaded from the database. Configure the Supabase connection to continue.');
     }
 
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Supabase query timed out')), 5000)
-    );
-
-    let query = supabase
-      .from('forms')
-      .select('*, questions(*), form_collaborators(*), profiles(id, email, full_name, avatar_url, role)');
-
-    if (currentUser?.role !== 'admin' && currentUser?.role !== 'organizer') {
-      query = query.eq('status', 'published').eq('is_public', true);
-    }
+    const client = supabase;
 
     try {
-      const { data, error }: any = await Promise.race([
-        query.order('created_at', { ascending: false }),
-        timeoutPromise
-      ]);
+      const { data, error }: any = await withSupabaseTimeout(
+        (signal) => {
+          let query = client
+            .from('forms')
+            .select('*, questions(*), form_collaborators(*), profiles(id, email, full_name, avatar_url, role)')
+            .abortSignal(signal);
 
-      if (error) throw error;
+          if (currentUser?.role !== 'admin' && currentUser?.role !== 'organizer') {
+            query = query.eq('status', 'published').eq('is_public', true);
+          }
+
+          return query.order('created_at', { ascending: false });
+        },
+        'Loading forms from Supabase'
+      );
+
+      if (error) throw toSupabaseError(error);
 
       return (data || []).map((row: any) => ({
         id: row.id,
@@ -172,21 +222,20 @@ export const formService = {
   // 2. Get Single Form by ID
   async getFormById(id: string): Promise<Form | null> {
     if (isSupabaseConfigured() && supabase && isValidUUID(id)) {
+      const client = supabase;
       try {
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Form fetch timed out')), 5000)
+        const { data, error }: any = await withSupabaseTimeout(
+          (signal) =>
+            client
+              .from('forms')
+              .select('*, questions(*), form_collaborators(*), profiles(id, email, full_name, avatar_url, role)')
+              .eq('id', id)
+              .abortSignal(signal)
+              .single(),
+          'Loading form details from Supabase'
         );
 
-        const { data, error }: any = await Promise.race([
-          supabase
-            .from('forms')
-            .select('*, questions(*), form_collaborators(*), profiles(id, email, full_name, avatar_url, role)')
-            .eq('id', id)
-            .single(),
-          timeoutPromise
-        ]);
-
-        if (error) throw error;
+        if (error) throw toSupabaseError(error);
         if (!data) return null;
 
         return {
