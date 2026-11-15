@@ -41,7 +41,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-white border-b border-slate-200">
+    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo & Brand */}
@@ -50,8 +50,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={() => onNavigate('dashboard')}
               className="flex items-center gap-2.5 text-left group focus:outline-none"
             >
-              <div className="w-9 h-9 rounded-lg bg-slate-950 flex items-center justify-center shadow-sm group-hover:scale-105 transition">
-                <img src="/auraform-icon.png" alt="" className="w-full h-full rounded-lg object-cover" />
+              <div className="w-9 h-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center shadow-sm transition group-hover:border-teal-300">
+                <img src="/auraform-icon.png" alt="AuraForm" className="w-full h-full rounded-lg object-contain" />
               </div>
               <div>
                 <span className="text-lg font-bold text-slate-900 tracking-tight">
@@ -67,7 +67,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onClick={() => onNavigate('dashboard')}
                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${
                   currentView === 'dashboard'
-                    ? 'bg-slate-100 text-slate-900'
+                    ? 'bg-teal-50 text-teal-800 ring-1 ring-inset ring-teal-200'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                 }`}
               >
@@ -98,7 +98,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               ) : (
                 <button
                   onClick={onOpenSignInPage}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-teal-800 bg-white border border-slate-300 rounded-lg hover:border-teal-300 hover:bg-teal-50 transition"
                 >
                   <LogIn className="w-4 h-4" />
                   <span>Sign In</span>

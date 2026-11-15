@@ -11,7 +11,7 @@ Built with **React 18**, **TypeScript**, **Tailwind CSS**, and **Supabase (Postg
 1. **Authentication & Role-Based Access Control (RBAC)**:
    - Pre-configured roles: `admin` (global control), `organizer` (owns forms & shared events), and `user` (respondent).
    - Persona switcher built-in for instant verification of permissions.
-   - Dual authentication: Connects directly to Supabase Auth or runs in zero-friction local interactive mode.
+   - Email/password and Google authentication powered by Supabase Auth.
 
 2. **Form & Event Builder**:
    - Google Forms-inspired design: Card layout with teal top accent, title, and description.
@@ -108,10 +108,10 @@ AuraForm is connected to Supabase with airtight PostgreSQL Row Level Security (R
 ### Supabase setup
 1. In Supabase, open **Authentication > Providers > Email** and enable email/password sign-in and sign-ups. Configure email confirmation as desired.
 2. In Supabase **Authentication > URL Configuration**, add `http://localhost:5173` and your deployed app URL to the allowed redirect URLs for email confirmation.
-3. Open Supabase **SQL Editor** and run `supabase/migrations/002_secure_admin_and_rls.sql`, followed by `supabase/migrations/003_google_auth_and_member_roles.sql` and `supabase/migrations/004_fix_verified_admin_promotion.sql`.
+3. Open Supabase **SQL Editor** and run `supabase/migrations/002_secure_admin_and_rls.sql`, followed by `supabase/migrations/003_google_auth_and_member_roles.sql`, `supabase/migrations/004_fix_verified_admin_promotion.sql`, and `supabase/migrations/005_organizer_member_management.sql`.
    - Run migration 003 only once: it defaults existing non-admin accounts to regular users; the designated administrator can assign organizer roles afterward.
-   - If migration 003 was already applied, do not run it again; run migration 004 to apply the admin-confirmation fix.
-4. In the `FormFlow-main/.env` file, set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, then restart the Vite server.
+   - If migrations 003 and 004 were already applied, do not run them again; run migration 005 to let organizers manage member roles without granting admin privileges.
+4. In the project root (the same directory as `package.json`), copy `.env.example` to `.env`. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to your Supabase project URL and anon/publishable key, then restart the Vite server. The `.env` file is git-ignored; never use a `service_role` key in the frontend.
 
 ---
 

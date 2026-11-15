@@ -215,8 +215,10 @@ export const FormResponderView: React.FC<FormResponderViewProps> = ({
           <ArrowLeft className="w-4 h-4" />
           <span>Back</span>
         </button>
-        <span className="text-[11px] font-medium text-slate-400">
-          Powered by <strong className="text-slate-700">AuraForm</strong>
+        <span className="flex items-center gap-1.5 text-[11px] font-medium text-slate-400">
+          Powered by
+          <img src="/auraform-icon.png" alt="AuraForm" className="h-4 w-4 object-contain" />
+          <strong className="text-slate-700">AuraForm</strong>
         </span>
       </div>
 

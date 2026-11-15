@@ -47,7 +47,7 @@ export const MemberManagement: React.FC = () => {
             <Users className="w-4 h-4 text-teal-600" />
             Member access
           </h2>
-          <p className="text-xs text-slate-500 mt-1">Grant or remove organizer access. Admin access is fixed to the designated account.</p>
+          <p className="text-xs text-slate-500 mt-1">Admins and organizers can grant or remove organizer access. Admin access is fixed to the designated account.</p>
         </div>
         <button
           type="button"

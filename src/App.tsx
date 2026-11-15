@@ -231,7 +231,10 @@ const FormFlowApp: React.FC = () => {
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-400">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <p>© 2026 AuraForm. Enterprise Forms & Event Management.</p>
+          <div className="flex items-center gap-2">
+            <img src="/auraform-icon.png" alt="AuraForm" className="h-5 w-5 object-contain" />
+            <p>© 2026 AuraForm. Enterprise Forms & Event Management.</p>
+          </div>
           <p className="flex items-center gap-2">
             <span>React + TypeScript + Vite</span>
             <span>•</span>

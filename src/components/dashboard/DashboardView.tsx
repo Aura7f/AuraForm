@@ -136,7 +136,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* Top Banner / Welcome */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Form & Event Dashboard</h1>
+          <h1 className="text-2xl font-bold text-teal-900 tracking-tight">Form & Event Dashboard</h1>
           <p className="text-sm text-slate-500 mt-1">
             {currentUser
               ? `Signed in as ${currentUser.fullName} (${currentUser.role})`
@@ -192,7 +192,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       )}
 
-      {currentUser?.role === 'admin' && <MemberManagement />}
+      {(currentUser?.role === 'admin' || currentUser?.role === 'organizer') && <MemberManagement />}
 
       {/* Metrics Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
