@@ -134,8 +134,8 @@ BEGIN
   END IF;
 
   RETURN EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE id = user_id AND role = 'admin'
+    SELECT 1 FROM public.profiles AS profile
+    WHERE profile.id = $1 AND profile.role = 'admin'
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
@@ -155,11 +155,11 @@ BEGIN
 
   -- 2. Check if user is owner or an editor collaborator
   RETURN EXISTS (
-    SELECT 1 FROM public.forms
-    WHERE id = p_form_id AND created_by = p_user_id
+    SELECT 1 FROM public.forms AS form
+    WHERE form.id = p_form_id AND form.created_by = p_user_id
   ) OR EXISTS (
-    SELECT 1 FROM public.form_collaborators
-    WHERE form_id = p_form_id AND user_id = p_user_id
+    SELECT 1 FROM public.form_collaborators AS collaborator
+    WHERE collaborator.form_id = p_form_id AND collaborator.user_id = p_user_id
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;

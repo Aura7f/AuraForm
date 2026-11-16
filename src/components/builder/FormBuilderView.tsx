@@ -185,10 +185,12 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
           <button
             type="button"
             onClick={handleBack}
-            className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-200 hover:text-slate-800"
-            title="Back to Dashboard"
+            className="group inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-800 shadow-sm transition duration-150 hover:border-teal-700 hover:bg-teal-700 hover:text-white hover:shadow-md active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2"
+            aria-label="Back to forms"
+            title="Return to the dashboard"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
+            <span>Back to Forms</span>
           </button>
           <div className="min-w-0">
             <h1 className="text-base font-bold text-slate-900 truncate max-w-xs sm:max-w-md">

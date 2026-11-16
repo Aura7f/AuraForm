@@ -10,7 +10,8 @@ Built with **React 18**, **TypeScript**, **Tailwind CSS**, and **Supabase (Postg
 
 1. **Authentication & Role-Based Access Control (RBAC)**:
    - Roles: `admin` (global control), `organizer` (owns forms & shared events), and `user` (respondent).
-   - Dashboard **Member access** panel for admins and organizers to adjust roles.
+   - Admin-only **Organizer Access** menu to manage organizers and review user requests.
+   - Regular users can request organizer access; only admins can approve or reject requests.
    - Email/password and Google authentication powered by Supabase Auth.
 
 2. **Form & Event Builder**:
@@ -75,14 +76,21 @@ Built with **React 18**, **TypeScript**, **Tailwind CSS**, and **Supabase (Postg
 
 ## 🚀 Getting Started
 
-### 1. Configure Supabase
+### 1. Install prerequisites and dependencies
 
-Complete the [Supabase setup](#supabase-setup) below first. AuraForm has no offline data layer: without
-valid `VITE_SUPABASE_*` credentials it shows a configuration message instead of forms.
+Install **Node.js 18 or newer** (npm is included). On Windows, double-click `setup.bat` to install the exact dependencies from `package-lock.json` and start the development server. To install manually on any platform, run:
 
-### 2. Start Development Server
+```bash
+npm ci
+```
 
-AuraForm is already installed and built in this directory. To launch the server:
+### 2. Configure Supabase
+
+Copy `.env.example` to `.env` if it does not exist, then set `VITE_SUPABASE_URL` and either `VITE_SUPABASE_ANON_KEY` or `VITE_SUPABASE_PUBLISHABLE_KEY`. Complete the [Supabase setup](#supabase-setup) below. AuraForm has no offline data layer; valid Supabase credentials are required to load forms.
+
+### 3. Start Development Server
+
+If you installed dependencies manually, launch the server with:
 
 ```bash
 npm run dev
@@ -106,16 +114,19 @@ AuraForm is connected to Supabase with airtight PostgreSQL Row Level Security (R
 ### Authentication and roles
 - **Sign-in:** A dedicated `/signin` page with Supabase email/password sign-in and account creation. Form links are preserved through sign-in.
 - **Single administrator:** Only the verified account `arujagadeesh801@gmail.com` receives the `admin` role.
-- **Organizers:** New accounts are regular `user` accounts. The admin can assign or remove organizer access from the dashboard's **Member access** panel.
+- **Organizers:** New accounts are regular `user` accounts. Users can request organizer access from the dashboard; only the admin can approve/reject requests or remove organizer access from the **Organizer Access** menu.
 - **Responders:** Authenticated users can submit responses to published public forms. They cannot create, edit, or manage forms.
 - Role checks are enforced by Supabase Row Level Security and a role-management database function, not only by the UI.
 
 ### Supabase setup
 1. In Supabase, open **Authentication > Providers > Email** and enable email/password sign-in and sign-ups. Configure email confirmation as desired.
 2. In Supabase **Authentication > URL Configuration**, add `http://localhost:5173` and your deployed app URL to the allowed redirect URLs for email confirmation.
-3. Open Supabase **SQL Editor** and run `supabase/migrations/002_secure_admin_and_rls.sql`, followed by `supabase/migrations/003_google_auth_and_member_roles.sql`, `supabase/migrations/004_fix_verified_admin_promotion.sql`, and `supabase/migrations/005_organizer_member_management.sql`.
+3. Open Supabase **SQL Editor** and run `supabase/migrations/002_secure_admin_and_rls.sql`, followed by `supabase/migrations/003_google_auth_and_member_roles.sql`, `supabase/migrations/004_fix_verified_admin_promotion.sql`, `supabase/migrations/005_organizer_member_management.sql`, `supabase/migrations/006_admin_only_member_role_management.sql`, `supabase/migrations/007_fix_ambiguous_role_lookup.sql`, `supabase/migrations/008_edit_response_answers.sql`, and `supabase/migrations/009_organizer_access_requests.sql`.
    - Run migration 003 only once: it defaults existing non-admin accounts to regular users; the designated administrator can assign organizer roles afterward.
-   - If migrations 003 and 004 were already applied, do not run them again; run migration 005 to let organizers manage member roles without granting admin privileges.
+   - If migration 005 was already applied, run migration 006 to ensure only admins can view the member access panel and change roles.
+   - If migrations 002–006 were already applied, run migration 007 to fix the ambiguous `user_id` database error when creating forms.
+   - Run migration 008 to enable authorized form managers to edit submitted question answers from the response sheet.
+   - Run migration 009 to enable organizer access requests and admin review. If the earlier migrations are already applied, run migration 009 only.
 4. In the project root (the same directory as `package.json`), copy `.env.example` to `.env`. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to your Supabase project URL and anon/publishable key, then restart the Vite server. The `.env` file is git-ignored; never use a `service_role` key in the frontend.
 
 ---

@@ -6,35 +6,48 @@ import {
   ChevronRight,
   Download,
   Eye,
+  Pencil,
+  RefreshCw,
+  Save,
   Search,
   UserCheck,
-  Users
+  Users,
+  X
 } from 'lucide-react';
 import { Form, FormResponse, RegistrationStatus } from '../../types';
 import { formService } from '../../services/formService';
-import { exportResponsesToCsv } from '../../utils/exportCsv';
+import { exportResponsesToCsv, getResponseCsvData } from '../../utils/exportCsv';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import { getErrorMessage } from '../../utils/errors';
 
 interface ResponsesViewProps {
   formId: string;
   onBack: () => void;
   onOpenForm: (formId: string) => void;
+  onEditForm: (formId: string) => void;
 }
 
 export const ResponsesView: React.FC<ResponsesViewProps> = ({
   formId,
   onBack,
-  onOpenForm
+  onOpenForm,
+  onEditForm
 }) => {
   const { showToast } = useToast();
+  const { user } = useAuth();
   const [form, setForm] = useState<Form | null>(null);
   const [responses, setResponses] = useState<FormResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'summary' | 'individual' | 'attendance'>('summary');
+  const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<'summary' | 'individual' | 'csv' | 'attendance'>('summary');
   const [individualIndex, setIndividualIndex] = useState(0);
   const [attendanceSearch, setAttendanceSearch] = useState('');
   const [attendanceFilter, setAttendanceFilter] = useState<'all' | RegistrationStatus>('all');
+  const [csvSearch, setCsvSearch] = useState('');
+  const [editingResponseId, setEditingResponseId] = useState<string | null>(null);
+  const [draftAnswers, setDraftAnswers] = useState<Record<string, string>>({});
+  const [savingResponseId, setSavingResponseId] = useState<string | null>(null);
 
   useEffect(() => {
     void loadData();
@@ -44,8 +57,12 @@ export const ResponsesView: React.FC<ResponsesViewProps> = ({
     setIndividualIndex(index => Math.min(index, Math.max(0, responses.length - 1)));
   }, [responses.length]);
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (isRefresh = false) => {
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     try {
       const [formData, responseData] = await Promise.all([
         formService.getFormById(formId),
@@ -57,6 +74,7 @@ export const ResponsesView: React.FC<ResponsesViewProps> = ({
       showToast(getErrorMessage(error, 'Failed to load responses.'), 'error');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -74,6 +92,59 @@ export const ResponsesView: React.FC<ResponsesViewProps> = ({
     if (!form) return;
     exportResponsesToCsv(form, form.questions || [], responses);
     showToast('CSV exported.', 'success');
+  };
+
+  const startEditingResponse = (response: FormResponse) => {
+    const answers: Record<string, string> = {};
+    (form?.questions || []).forEach(question => {
+      const value = response.answers[question.id];
+      answers[question.id] = Array.isArray(value) ? value.join('; ') : value == null ? '' : String(value);
+    });
+    setDraftAnswers(answers);
+    setEditingResponseId(response.id);
+  };
+
+  const saveResponseAnswers = async (response: FormResponse) => {
+    if (!form) return;
+
+    const answers: FormResponse['answers'] = {};
+    for (const question of form.questions || []) {
+      const value = (draftAnswers[question.id] || '').trim();
+      if (question.required && !value) {
+        showToast(`"${question.title}" is required.`, 'error');
+        return;
+      }
+      if (question.type === 'linear_scale' && value) {
+        const numericValue = Number(value);
+        if (
+          !Number.isFinite(numericValue) ||
+          numericValue < (question.scaleMin ?? 1) ||
+          numericValue > (question.scaleMax ?? 5)
+        ) {
+          showToast(`Enter a value between ${question.scaleMin ?? 1} and ${question.scaleMax ?? 5} for "${question.title}".`, 'error');
+          return;
+        }
+        answers[question.id] = numericValue;
+      } else if (question.type === 'checkboxes') {
+        answers[question.id] = value ? value.split(';').map(item => item.trim()).filter(Boolean) : [];
+      } else {
+        answers[question.id] = value;
+      }
+    }
+
+    setSavingResponseId(response.id);
+    try {
+      await formService.updateResponseAnswers(response.id, answers);
+      setResponses(current =>
+        current.map(item => item.id === response.id ? { ...item, answers } : item)
+      );
+      setEditingResponseId(null);
+      showToast('Response changes saved.', 'success');
+    } catch (error) {
+      showToast(getErrorMessage(error, 'Failed to save response changes.'), 'error');
+    } finally {
+      setSavingResponseId(null);
+    }
   };
 
   // Filtered participants for attendance table
@@ -102,6 +173,38 @@ export const ResponsesView: React.FC<ResponsesViewProps> = ({
     return { total, registered, attended, confirmed, rate };
   }, [responses]);
 
+  const csvData = useMemo(
+    () => form
+      ? getResponseCsvData(form, form.questions || [], responses)
+      : { headers: [], rows: [] },
+    [form, responses]
+  );
+
+  const filteredCsvRows = useMemo(() => {
+    const query = csvSearch.trim().toLowerCase();
+    return csvData.rows
+      .map((values, responseIndex) => ({ values, responseIndex }))
+      .filter(({ values }) =>
+        !query || values.some(value => value.toLowerCase().includes(query))
+      );
+  }, [csvData, csvSearch]);
+  const canEditResponses = user?.role === 'admin' || (
+    user?.role === 'organizer' &&
+    (form?.createdBy === user.id ||
+      form?.collaborators?.some(collaborator => collaborator.userId === user.id && collaborator.role === 'editor'))
+  );
+  const canEditForm = Boolean(
+    user?.role === 'admin' ||
+      (user?.role === 'organizer' &&
+        form &&
+        (form.createdBy === user.id ||
+          form.collaborators?.some(
+            collaborator =>
+              collaborator.role === 'editor' &&
+              (collaborator.userId === user.id || collaborator.userEmail === user.email)
+          )))
+  );
+
   if (loading) {
     return (
       <div className="py-20 text-center">
@@ -127,14 +230,17 @@ export const ResponsesView: React.FC<ResponsesViewProps> = ({
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-16">
       {/* Header bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex sm:items-center sm:justify-between sm:gap-4 sm:p-5">
         <div className="flex items-center gap-3">
           <button
+            type="button"
             onClick={onBack}
-            className="p-1.5 text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-200 transition"
-            title="Back to Dashboard"
+            className="group inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-800 shadow-sm transition duration-150 hover:border-teal-700 hover:bg-teal-700 hover:text-white hover:shadow-md active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2"
+            aria-label="Back to forms"
+            title="Return to the dashboard"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
+            <span>Back to Forms</span>
           </button>
           <div>
             <h1 className="text-xl font-bold text-slate-900 truncate max-w-md">{form.title}</h1>
@@ -144,8 +250,29 @@ export const ResponsesView: React.FC<ResponsesViewProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2 sm:mt-0 sm:justify-end">
           <button
+            type="button"
+            onClick={() => void loadData(true)}
+            disabled={refreshing}
+            aria-label="Refresh responses"
+            title="Refresh responses"
+            className="p-2 text-slate-500 hover:text-teal-700 hover:bg-white rounded-lg border border-slate-200 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+          {canEditForm && (
+            <button
+              type="button"
+              onClick={() => onEditForm(form.id)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-800 transition hover:border-teal-300 hover:bg-teal-100"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              <span>Edit Form</span>
+            </button>
+          )}
+          <button
+            type="button"
             onClick={() => onOpenForm(form.id)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition"
           >
@@ -165,10 +292,10 @@ export const ResponsesView: React.FC<ResponsesViewProps> = ({
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-200 bg-white rounded-xl p-1 shadow-sm">
+      <div className="flex flex-nowrap overflow-x-auto border-b border-slate-200 bg-white rounded-xl p-1 shadow-sm">
         <button
           onClick={() => setActiveTab('summary')}
-          className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${
+          className={`min-w-max flex-1 whitespace-nowrap px-3 py-2 text-xs font-bold rounded-lg transition ${
             activeTab === 'summary'
               ? 'bg-teal-600 text-white shadow-sm'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -179,7 +306,7 @@ export const ResponsesView: React.FC<ResponsesViewProps> = ({
 
         <button
           onClick={() => setActiveTab('individual')}
-          className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${
+          className={`min-w-max flex-1 whitespace-nowrap px-3 py-2 text-xs font-bold rounded-lg transition ${
             activeTab === 'individual'
               ? 'bg-teal-600 text-white shadow-sm'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -188,10 +315,21 @@ export const ResponsesView: React.FC<ResponsesViewProps> = ({
           Individual ({responses.length})
         </button>
 
+        <button
+          onClick={() => setActiveTab('csv')}
+          className={`min-w-max flex-1 whitespace-nowrap px-3 py-2 text-xs font-bold rounded-lg transition ${
+            activeTab === 'csv'
+              ? 'bg-teal-600 text-white shadow-sm'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+          }`}
+        >
+          CSV Preview
+        </button>
+
         {form.settings.isEvent && (
           <button
             onClick={() => setActiveTab('attendance')}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
+            className={`min-w-max flex-1 whitespace-nowrap px-3 py-2 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
               activeTab === 'attendance'
                 ? 'bg-teal-600 text-white shadow-sm'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -453,6 +591,130 @@ export const ResponsesView: React.FC<ResponsesViewProps> = ({
             </div>
           )}
 
+          {activeTab === 'csv' && (
+            <div className="space-y-3">
+              <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900">Response CSV preview</h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Showing {filteredCsvRows.length} of {csvData.rows.length} responses. Edit question answers here; refresh to load the latest data.
+                  </p>
+                </div>
+                <div className="relative w-full sm:max-w-xs">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                  <input
+                    type="search"
+                    value={csvSearch}
+                    onChange={event => setCsvSearch(event.target.value)}
+                    placeholder="Search responses..."
+                    aria-label="Search CSV preview"
+                    className="w-full rounded-lg border border-slate-300 py-1.5 pl-9 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div className="max-h-[65vh] overflow-auto">
+                  <table className="w-full min-w-max border-collapse text-left text-xs text-slate-700">
+                    <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      <tr>
+                        {csvData.headers.map((header, index) => (
+                          <th key={`${header}-${index}`} className="whitespace-nowrap border border-slate-200 px-3 py-3">
+                            {header}
+                          </th>
+                        ))}
+                        {canEditResponses && (
+                          <th className="sticky right-0 border border-slate-200 bg-slate-50 px-3 py-3 text-right">Actions</th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredCsvRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={csvData.headers.length + (canEditResponses ? 1 : 0)} className="px-4 py-8 text-center text-slate-400">
+                            No responses match the search.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredCsvRows.map(({ values, responseIndex }) => {
+                          const response = responses[responseIndex];
+                          const isEditing = response?.id === editingResponseId;
+                          const answerStartColumn = 4 + (form.settings.isEvent ? 2 : 0);
+                          return (
+                            <tr key={response?.id || responseIndex} className="hover:bg-slate-50/80">
+                              {values.map((value, columnIndex) => {
+                                const question = form.questions?.[columnIndex - answerStartColumn];
+                                return (
+                                  <td
+                                    key={`${responseIndex}-${columnIndex}`}
+                                    title={!isEditing || !question ? value : undefined}
+                                    className={`max-w-xs border border-slate-200 px-2 py-2 ${question && isEditing ? 'bg-white' : ''}`}
+                                  >
+                                    {question && isEditing ? (
+                                      <input
+                                        type="text"
+                                        value={draftAnswers[question.id] ?? ''}
+                                        onChange={event => setDraftAnswers(current => ({
+                                          ...current,
+                                          [question.id]: event.target.value
+                                        }))}
+                                        aria-label={`Answer for ${question.title}`}
+                                        className="w-full min-w-36 rounded border border-teal-300 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                      />
+                                    ) : (
+                                      <span className="block max-w-xs truncate whitespace-nowrap px-1 py-1.5">
+                                        {value || '—'}
+                                      </span>
+                                    )}
+                                  </td>
+                                );
+                              })}
+                              {canEditResponses && (
+                                <td className="sticky right-0 whitespace-nowrap border border-slate-200 bg-white px-2 py-2 text-right">
+                                  {isEditing ? (
+                                    <div className="flex items-center justify-end gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => void saveResponseAnswers(response)}
+                                        disabled={savingResponseId === response.id}
+                                        className="inline-flex items-center gap-1 rounded bg-teal-600 px-2 py-1.5 text-[11px] font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
+                                      >
+                                        <Save className="h-3 w-3" />
+                                        Save
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingResponseId(null)}
+                                        disabled={savingResponseId === response.id}
+                                        className="rounded border border-slate-300 px-2 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => startEditingResponse(response)}
+                                      disabled={editingResponseId !== null}
+                                      className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                                    >
+                                      <Pencil className="h-3 w-3" />
+                                      Edit
+                                    </button>
+                                  )}
+                                </td>
+                              )}
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* TAB 3: EVENT ATTENDANCE & CHECK-IN (Event mode) */}
           {activeTab === 'attendance' && form.settings.isEvent && (
             <div className="space-y-4">
@@ -469,12 +731,12 @@ export const ResponsesView: React.FC<ResponsesViewProps> = ({
                   />
                 </div>
 
-                <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                <div className="flex w-full flex-nowrap items-center gap-1.5 overflow-x-auto pb-1 sm:w-auto">
                   {(['all', 'registered', 'confirmed', 'attended', 'cancelled'] as const).map(st => (
                     <button
                       key={st}
                       onClick={() => setAttendanceFilter(st)}
-                      className={`px-2.5 py-1 text-xs font-semibold rounded-lg capitalize transition ${
+                      className={`shrink-0 px-2.5 py-1 text-xs font-semibold rounded-lg capitalize transition ${
                         attendanceFilter === st
                           ? 'bg-teal-600 text-white'
                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200'

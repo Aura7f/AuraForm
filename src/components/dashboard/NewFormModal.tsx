@@ -97,7 +97,7 @@ export const NewFormModal: React.FC<NewFormModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/60 px-3 py-4 backdrop-blur-sm sm:items-center sm:p-4"
       onMouseDown={event => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -106,9 +106,9 @@ export const NewFormModal: React.FC<NewFormModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="new-form-title"
-        className="animate-in fade-in zoom-in-95 relative w-full max-w-lg overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-2xl"
+        className="animate-in fade-in zoom-in-95 relative max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-100 bg-white shadow-2xl"
       >
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+        <div className="flex items-center justify-between border-b border-slate-100 p-4 sm:p-6">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center">
               <Sparkles className="w-5 h-5" />
@@ -130,9 +130,9 @@ export const NewFormModal: React.FC<NewFormModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 p-4 sm:p-6">
           {/* Mode Selector Cards */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <button
               type="button"
               onClick={() => setIsEvent(false)}

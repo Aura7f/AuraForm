@@ -147,18 +147,20 @@ BEGIN
     RETURN true;
   END IF;
   IF NOT EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE id = p_user_id AND role = 'organizer'
+    SELECT 1 FROM public.profiles AS profile
+    WHERE profile.id = p_user_id AND profile.role = 'organizer'
   ) THEN
     RETURN false;
   END IF;
 
   RETURN EXISTS (
-    SELECT 1 FROM public.forms
-    WHERE id = p_form_id AND created_by = p_user_id
+    SELECT 1 FROM public.forms AS form
+    WHERE form.id = p_form_id AND form.created_by = p_user_id
   ) OR EXISTS (
-    SELECT 1 FROM public.form_collaborators
-    WHERE form_id = p_form_id AND user_id = p_user_id AND role = 'editor'
+    SELECT 1 FROM public.form_collaborators AS collaborator
+    WHERE collaborator.form_id = p_form_id
+      AND collaborator.user_id = p_user_id
+      AND collaborator.role = 'editor'
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;

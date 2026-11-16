@@ -1,4 +1,4 @@
--- Allow organizers to manage user/organizer roles from the Member access panel.
+-- Allow only admins to manage user/organizer roles from the Member access panel.
 -- Admin assignment remains restricted to the designated, verified account.
 
 CREATE OR REPLACE FUNCTION public.protect_profile_role()
@@ -29,19 +29,7 @@ BEGIN
       ) THEN
         NEW.role := OLD.role;
       END IF;
-    ELSIF public.is_admin(auth.uid()) THEN
-      NULL;
-    ELSIF NEW.id <> auth.uid()
-      AND OLD.role <> 'admin'
-      AND NEW.role IN ('organizer', 'user')
-      AND EXISTS (
-        SELECT 1
-        FROM public.profiles
-        WHERE id = auth.uid()
-          AND role = 'organizer'
-      ) THEN
-      NULL;
-    ELSE
+    ELSIF NOT public.is_admin(auth.uid()) THEN
       NEW.role := OLD.role;
     END IF;
   END IF;
@@ -61,16 +49,8 @@ CREATE OR REPLACE FUNCTION public.set_member_role(
 )
 RETURNS VOID AS $$
 BEGIN
-  IF auth.uid() IS NULL OR NOT (
-    public.is_admin(auth.uid())
-    OR EXISTS (
-      SELECT 1
-      FROM public.profiles
-      WHERE id = auth.uid()
-        AND role = 'organizer'
-    )
-  ) THEN
-    RAISE EXCEPTION 'Only administrators and organizers can assign member roles.';
+  IF auth.uid() IS NULL OR NOT public.is_admin(auth.uid()) THEN
+    RAISE EXCEPTION 'Only administrators can assign member roles.';
   END IF;
   IF target_role NOT IN ('organizer', 'user') THEN
     RAISE EXCEPTION 'The administrator role is fixed and cannot be assigned.';

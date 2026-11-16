@@ -1,13 +1,10 @@
 import { Form, Question, FormResponse } from '../types';
 
-export const exportResponsesToCsv = (
+export const getResponseCsvData = (
   form: Form,
   questions: Question[],
   responses: FormResponse[]
-) => {
-  if (!responses || responses.length === 0) return;
-
-  // Header row
+): { headers: string[]; rows: string[][] } => {
   const headers = [
     'Submission ID',
     'Submitted At',
@@ -21,13 +18,10 @@ export const exportResponsesToCsv = (
 
   // Add question titles as headers
   questions.forEach(q => {
-    headers.push(q.title.replace(/"/g, '""'));
+    headers.push(q.title);
   });
 
-  const rows: string[] = [headers.map(h => `"${h}"`).join(',')];
-
-  // Data rows
-  responses.forEach(resp => {
+  const rows = responses.map(resp => {
     const rowValues: string[] = [
       resp.id,
       new Date(resp.submittedAt).toLocaleString(),
@@ -51,13 +45,26 @@ export const exportResponsesToCsv = (
           formattedVal = String(val);
         }
       }
-      rowValues.push(formattedVal.replace(/"/g, '""'));
+      rowValues.push(formattedVal);
     });
-
-    rows.push(rowValues.map(v => `"${v}"`).join(','));
+    return rowValues;
   });
 
-  const blob = new Blob(['\uFEFF' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  return { headers, rows };
+};
+
+export const exportResponsesToCsv = (
+  form: Form,
+  questions: Question[],
+  responses: FormResponse[]
+) => {
+  const { headers, rows } = getResponseCsvData(form, questions, responses);
+  if (rows.length === 0) return;
+
+  const csvRows = [headers, ...rows].map(row =>
+    row.map(value => `"${value.replace(/"/g, '""')}"`).join(',')
+  );
+  const blob = new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
   const downloadUrl = URL.createObjectURL(blob);
   const link = document.createElement('a');
   const safeTitle = form.title.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 30);

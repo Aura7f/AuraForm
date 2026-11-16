@@ -203,11 +203,13 @@ export const FormResponderView: React.FC<FormResponderViewProps> = ({
       {/* Top Navigation */}
       <div className="flex items-center justify-between">
         <button
+          type="button"
           onClick={onBack}
-          className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm transition"
+          className="group inline-flex cursor-pointer items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-800 shadow-sm transition duration-150 hover:border-teal-700 hover:bg-teal-700 hover:text-white hover:shadow-md active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2"
+          aria-label="Back to forms"
         >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Back</span>
+          <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
+          <span>Back to Forms</span>
         </button>
         <span className="flex items-center gap-1.5 text-[11px] font-medium text-slate-400">
           Powered by

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider, useToast } from './context/ToastContext';
 import { Navbar } from './components/common/Navbar';
-import { DashboardView } from './components/dashboard/DashboardView';
+import { AdminDashboardPage, DashboardView } from './components/dashboard/DashboardView';
 import { FormBuilderView } from './components/builder/FormBuilderView';
 import { FormResponderView } from './components/responder/FormResponderView';
 import { ResponsesView } from './components/responses/ResponsesView';
@@ -35,6 +35,7 @@ const AuraFormApp: React.FC = () => {
   const [initialRoute] = useState(() => getRouteState());
   const [isSignInPage, setIsSignInPage] = useState(initialRoute.isSignInPage);
   const [currentView, setCurrentView] = useState<ViewMode>(initialRoute.currentView);
+  const [adminDashboardPage, setAdminDashboardPage] = useState<AdminDashboardPage>('home');
   const [selectedFormId, setSelectedFormId] = useState<string | null>(initialRoute.selectedFormId);
   const [activeForm, setActiveForm] = useState<Form | null>(null);
   const [forms, setForms] = useState<Form[]>([]);
@@ -192,6 +193,8 @@ const AuraFormApp: React.FC = () => {
                 forms={forms}
                 loadError={formsError}
                 currentUser={user}
+                adminPage={adminDashboardPage}
+                onAdminPageChange={setAdminDashboardPage}
                 onOpenFormBuilder={handleOpenBuilder}
                 onOpenFormResponder={handleOpenResponder}
                 onOpenResponses={handleOpenResponses}
@@ -227,6 +230,7 @@ const AuraFormApp: React.FC = () => {
                 formId={selectedFormId}
                 onBack={() => handleNavigate('dashboard')}
                 onOpenForm={handleOpenResponder}
+                onEditForm={handleOpenBuilder}
               />
             )}
           </>

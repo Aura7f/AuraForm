@@ -15,12 +15,24 @@ export type CollaboratorRole = 'editor' | 'viewer';
 
 export type RegistrationStatus = 'registered' | 'confirmed' | 'attended' | 'cancelled';
 
+export type OrganizerAccessRequestStatus = 'pending' | 'approved' | 'rejected';
+
 export interface UserProfile {
   id: string;
   email: string;
   fullName: string;
   role: UserRole;
   avatarUrl?: string;
+}
+
+export interface OrganizerAccessRequest {
+  id: string;
+  userId: string;
+  status: OrganizerAccessRequestStatus;
+  createdAt: string;
+  reviewedAt: string | null;
+  requesterName?: string;
+  requesterEmail?: string;
 }
 
 export interface Question {

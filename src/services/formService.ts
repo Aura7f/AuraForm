@@ -6,6 +6,8 @@ import {
   FormResponse,
   FormSettings,
   FormStatus,
+  OrganizerAccessRequest,
+  OrganizerAccessRequestStatus,
   Question,
   QuestionType,
   RegistrationStatus,
@@ -91,6 +93,15 @@ interface ResponseRow {
   submitted_at: string;
   answers?: AnswerRow[] | null;
   event_registrations?: RegistrationRow[] | null;
+}
+
+interface OrganizerAccessRequestRow {
+  id: string;
+  user_id: string;
+  status: OrganizerAccessRequestStatus;
+  created_at: string;
+  reviewed_at: string | null;
+  profiles?: { email: string; full_name: string | null } | { email: string; full_name: string | null }[] | null;
 }
 
 interface QuestionInsert {
@@ -307,6 +318,70 @@ export const formService = {
     const { error } = await client.rpc('set_member_role', {
       target_user_id: userId,
       target_role: role
+    });
+    if (error) throw toSupabaseError(error);
+  },
+
+  async requestOrganizerAccess(): Promise<string> {
+    const client = requireClient();
+    const { data, error } = await client.rpc('request_organizer_access');
+    if (error) throw toSupabaseError(error);
+    if (!data) throw new Error('Organizer access request did not return an ID.');
+    return data;
+  },
+
+  async getOrganizerAccessRequests(): Promise<OrganizerAccessRequest[]> {
+    const client = requireClient();
+    const { data, error } = await client
+      .from('organizer_access_requests')
+      .select('id, user_id, status, created_at, reviewed_at, profiles!organizer_access_requests_user_id_fkey(email, full_name)')
+      .order('created_at', { ascending: false });
+    if (error) throw toSupabaseError(error);
+
+    return ((data || []) as OrganizerAccessRequestRow[]).map(request => {
+      const profile = Array.isArray(request.profiles) ? request.profiles[0] : request.profiles;
+      return {
+        id: request.id,
+        userId: request.user_id,
+        status: request.status,
+        createdAt: request.created_at,
+        reviewedAt: request.reviewed_at,
+        requesterName: profile?.full_name || profile?.email,
+        requesterEmail: profile?.email
+      };
+    });
+  },
+
+  async getMyOrganizerAccessRequest(userId: string): Promise<OrganizerAccessRequest | null> {
+    if (!isValidUUID(userId)) throw new Error('Invalid user id.');
+
+    const client = requireClient();
+    const { data, error } = await client
+      .from('organizer_access_requests')
+      .select('id, user_id, status, created_at, reviewed_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw toSupabaseError(error);
+    if (!data) return null;
+
+    return {
+      id: data.id,
+      userId: data.user_id,
+      status: data.status,
+      createdAt: data.created_at,
+      reviewedAt: data.reviewed_at
+    };
+  },
+
+  async reviewOrganizerAccessRequest(requestId: string, approve: boolean): Promise<void> {
+    if (!isValidUUID(requestId)) throw new Error('Invalid access request id.');
+
+    const client = requireClient();
+    const { error } = await client.rpc('review_organizer_access_request', {
+      target_request_id: requestId,
+      should_approve: approve
     });
     if (error) throw toSupabaseError(error);
   },
@@ -624,6 +699,20 @@ export const formService = {
         checkedInAt: registration?.checked_in_at || null
       };
     });
+  },
+
+  async updateResponseAnswers(
+    responseId: string,
+    answers: FormResponse['answers']
+  ): Promise<void> {
+    if (!isValidUUID(responseId)) throw new Error('Invalid response id.');
+
+    const client = requireClient();
+    const { error } = await client.rpc('update_form_response_answers', {
+      target_response_id: responseId,
+      target_answers: answers
+    });
+    if (error) throw toSupabaseError(error);
   },
 
   async updateAttendance(

@@ -69,7 +69,7 @@ export const CollaboratorModal: React.FC<CollaboratorModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/60 px-3 py-4 backdrop-blur-sm sm:items-center sm:p-4"
       onMouseDown={event => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -78,9 +78,9 @@ export const CollaboratorModal: React.FC<CollaboratorModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="collaborators-title"
-        className="animate-in fade-in zoom-in-95 relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-2xl"
+        className="animate-in fade-in zoom-in-95 relative max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-100 bg-white shadow-2xl"
       >
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+        <div className="flex items-center justify-between border-b border-slate-100 p-4 sm:p-6">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center">
               <Users className="w-5 h-5" />
@@ -102,11 +102,11 @@ export const CollaboratorModal: React.FC<CollaboratorModalProps> = ({
           </button>
         </div>
 
-        <div className="p-6 space-y-5">
+        <div className="space-y-5 p-4 sm:p-6">
           {/* Add form */}
           <form onSubmit={handleAdd} className="space-y-3">
             <label className="block text-xs font-semibold text-slate-700">Invite Organizer by Email</label>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <div className="relative flex-1">
                 <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                 <input
@@ -122,7 +122,7 @@ export const CollaboratorModal: React.FC<CollaboratorModalProps> = ({
               <select
                 value={role}
                 onChange={e => setRole(e.target.value as CollaboratorRole)}
-                className="px-2.5 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none"
+                className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs focus:outline-none sm:w-auto"
               >
                 <option value="editor">Editor</option>
                 <option value="viewer">Viewer</option>
@@ -131,7 +131,7 @@ export const CollaboratorModal: React.FC<CollaboratorModalProps> = ({
               <button
                 type="submit"
                 disabled={loading}
-                className="px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition disabled:opacity-50"
+                className="flex items-center justify-center gap-1 rounded-lg bg-teal-600 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-teal-700 disabled:opacity-50"
               >
                 <UserPlus className="w-3.5 h-3.5" />
                 <span>Add</span>
