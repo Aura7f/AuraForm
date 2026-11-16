@@ -86,7 +86,7 @@ npm ci
 
 ### 2. Configure Supabase
 
-Copy `.env.example` to `.env` if it does not exist, then set `VITE_SUPABASE_URL` and either `VITE_SUPABASE_ANON_KEY` or `VITE_SUPABASE_PUBLISHABLE_KEY`. Complete the [Supabase setup](#supabase-setup) below. AuraForm has no offline data layer; valid Supabase credentials are required to load forms.
+Copy `.env.example` to `.env` if it does not exist, then set `VITE_SUPABASE_URL` and either `VITE_SUPABASE_ANON_KEY` or `VITE_SUPABASE_PUBLISHABLE_KEY`. Use the exact project URL and a one-line public key from Supabase; do not include quotes or whitespace within either value. For Vercel, add these values under **Project Settings > Environment Variables** for each deployment environment you use, then redeploy so Vite includes the updated values. Complete the [Supabase setup](#supabase-setup) below. AuraForm has no offline data layer; valid Supabase credentials are required to load forms.
 
 ### 3. Start Development Server
 
