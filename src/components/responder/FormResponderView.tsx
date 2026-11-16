@@ -1,20 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import {
-  Calendar,
-  Clock,
-  MapPin,
-  AlertCircle,
-  CheckCircle2,
-  ArrowLeft,
-  Users,
-  Send,
-  RotateCcw
-} from 'lucide-react';
-import { Form, Question } from '../../types';
+import React, { useEffect, useState } from 'react';
+import { AlertCircle, ArrowLeft, Calendar, CheckCircle2, Clock, MapPin, RotateCcw, Send } from 'lucide-react';
+import { Form } from '../../types';
 import { formService } from '../../services/formService';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { validateFormSubmission, isValidEmail } from '../../utils/validation';
+import { isValidEmail, validateFormSubmission } from '../../utils/validation';
+import { getErrorMessage } from '../../utils/errors';
+
+type AnswerValue = string | string[] | number;
 
 interface FormResponderViewProps {
   formId: string;
@@ -30,11 +23,11 @@ export const FormResponderView: React.FC<FormResponderViewProps> = ({
   const { user } = useAuth();
   const { showToast } = useToast();
   const [form, setForm] = useState<Form | null>(null);
-  const [answers, setAnswers] = useState<Record<string, any>>(() => {
+  const [answers, setAnswers] = useState<Record<string, AnswerValue>>(() => {
     try {
       return JSON.parse(sessionStorage.getItem(`auraform-response-draft-${formId}`) || '{}');
-    } catch (err) {
-      console.error('Failed to restore response draft:', err);
+    } catch (error) {
+      console.error('Failed to restore response draft:', error);
       return {};
     }
   });
@@ -52,16 +45,15 @@ export const FormResponderView: React.FC<FormResponderViewProps> = ({
   useEffect(() => {
     try {
       sessionStorage.setItem(`auraform-response-draft-${formId}`, JSON.stringify(answers));
-    } catch (err) {
-      console.error('Failed to save response draft:', err);
+    } catch (error) {
+      console.error('Failed to save response draft:', error);
     }
   }, [answers, formId]);
 
   useEffect(() => {
-    if (user) {
-      if (!participantName) setParticipantName(user.fullName);
-      if (!participantEmail) setParticipantEmail(user.email);
-    }
+    if (!user) return;
+    setParticipantName(current => current || user.fullName);
+    setParticipantEmail(user.email);
   }, [user]);
 
   const loadForm = async () => {
@@ -69,8 +61,8 @@ export const FormResponderView: React.FC<FormResponderViewProps> = ({
     try {
       const data = await formService.getFormById(formId);
       setForm(data);
-    } catch (err: any) {
-      showToast(err?.message || 'Failed to load form', 'error');
+    } catch (error) {
+      showToast(getErrorMessage(error, 'Failed to load form.'), 'error');
     } finally {
       setLoading(false);
     }
@@ -105,23 +97,22 @@ export const FormResponderView: React.FC<FormResponderViewProps> = ({
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (!form) return;
     if (!user) {
-      showToast('Sign in with Google before submitting a response.', 'error');
+      showToast('Sign in before submitting a response.', 'error');
       return;
     }
 
     const newErrors: Record<string, string> = {};
 
-    // Validate participant info if event mode
     if (form.settings.isEvent) {
       if (!participantName.trim()) {
-        newErrors['participant_name'] = 'Full name is required for event registration.';
+        newErrors.participant_name = 'Full name is required for event registration.';
       }
-      if (!participantEmail.trim() || !isValidEmail(participantEmail)) {
-        newErrors['participant_email'] = 'A valid email address is required for confirmation.';
+      if (!isValidEmail(user.email)) {
+        newErrors.participant_email = 'Your account needs a valid email address for event confirmation.';
       }
     }
 
@@ -136,8 +127,10 @@ export const FormResponderView: React.FC<FormResponderViewProps> = ({
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       showToast('Please fix the highlighted errors before submitting.', 'error');
-      // Scroll to first error
-      window.scrollTo({ top: 150, behavior: 'smooth' });
+      const firstErrorField = Object.keys(newErrors)[0];
+      document
+        .getElementById(`field-${firstErrorField}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
 
@@ -148,7 +141,7 @@ export const FormResponderView: React.FC<FormResponderViewProps> = ({
         answers,
         {
           name: participantName.trim(),
-          email: participantEmail.trim()
+          email: user.email
         },
         user
       );
@@ -156,12 +149,12 @@ export const FormResponderView: React.FC<FormResponderViewProps> = ({
       if (result.success) {
         sessionStorage.removeItem(`auraform-response-draft-${formId}`);
         setSubmitted(true);
-        showToast('Response recorded successfully!', 'success');
+        showToast('Response recorded successfully.', 'success');
       } else {
         showToast(result.error || 'Submission failed.', 'error');
       }
-    } catch (err: any) {
-      showToast(err?.message || 'Error submitting response.', 'error');
+    } catch (error) {
+      showToast(getErrorMessage(error, 'Error submitting response.'), 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -200,8 +193,9 @@ export const FormResponderView: React.FC<FormResponderViewProps> = ({
     );
   }
 
-  // Check deadline / status
-  const isExpired = form.settings.deadline && new Date() > new Date(form.settings.deadline);
+  const isExpired = Boolean(
+    form.settings.deadline && new Date() > new Date(form.settings.deadline)
+  );
   const isClosed = form.status === 'closed' || isExpired;
 
   return (
@@ -217,7 +211,7 @@ export const FormResponderView: React.FC<FormResponderViewProps> = ({
         </button>
         <span className="flex items-center gap-1.5 text-[11px] font-medium text-slate-400">
           Powered by
-          <img src="/auraform-icon.png" alt="AuraForm" className="h-4 w-4 object-contain" />
+          <img src="/logo.png" alt="AuraForm" className="h-4 w-4 object-contain" />
           <strong className="text-slate-700">AuraForm</strong>
         </span>
       </div>
@@ -292,13 +286,16 @@ export const FormResponderView: React.FC<FormResponderViewProps> = ({
         <form onSubmit={handleSubmit} className="space-y-4">
           {!user && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <p className="text-xs text-amber-900">Sign in with Google to submit your response. Your answers will be restored after sign-in.</p>
+              <p className="text-xs text-amber-900">
+                Sign in to submit your response. Your answers are saved as a draft and restored after
+                sign-in.
+              </p>
               <button
                 type="button"
                 onClick={onRequestSignIn}
-                className="shrink-0 px-3 py-2 bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold rounded-lg"
+                className="shrink-0 rounded-lg bg-teal-700 px-3 py-2 text-xs font-semibold text-white hover:bg-teal-800"
               >
-                Sign in with Google
+                Sign in
               </button>
             </div>
           )}
@@ -342,39 +339,41 @@ export const FormResponderView: React.FC<FormResponderViewProps> = ({
           {form.settings.isEvent && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
               <h3 className="text-sm font-bold text-slate-900">Participant Details</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div id="field-participant_name">
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">
                     Full Name <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
                     required
                     value={participantName}
-                    onChange={e => setParticipantName(e.target.value)}
+                    onChange={event => setParticipantName(event.target.value)}
                     placeholder="Your legal or preferred name"
-                    className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                    className="w-full rounded-lg border border-slate-300 px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
-                  {errors['participant_name'] && (
-                    <p className="text-[11px] text-rose-500 mt-1">{errors['participant_name']}</p>
+                  {errors.participant_name && (
+                    <p className="mt-1 text-[11px] text-rose-500">{errors.participant_name}</p>
                   )}
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <div id="field-participant_email">
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">
                     Email Address <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="email"
                     required
-                    value={participantEmail}
-                  readOnly={Boolean(user)}
-                  onChange={e => setParticipantEmail(e.target.value)}
+                    readOnly={Boolean(user)}
+                    value={user?.email || participantEmail}
+                    onChange={event => setParticipantEmail(event.target.value)}
                     placeholder="your.email@college.edu"
-                    className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                    className={`w-full rounded-lg border border-slate-300 px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                      user ? 'bg-slate-50 text-slate-500' : ''
+                    }`}
                   />
-                  {errors['participant_email'] && (
-                    <p className="text-[11px] text-rose-500 mt-1">{errors['participant_email']}</p>
+                  {errors.participant_email && (
+                    <p className="mt-1 text-[11px] text-rose-500">{errors.participant_email}</p>
                   )}
                 </div>
               </div>
@@ -388,7 +387,8 @@ export const FormResponderView: React.FC<FormResponderViewProps> = ({
             return (
               <div
                 key={q.id}
-                className={`bg-white rounded-xl border p-6 shadow-sm transition space-y-3 ${
+                id={`field-${q.id}`}
+                className={`space-y-3 rounded-xl border bg-white p-6 shadow-sm transition ${
                   hasError ? 'border-rose-300 ring-1 ring-rose-200' : 'border-slate-200'
                 }`}
               >
@@ -450,7 +450,8 @@ export const FormResponderView: React.FC<FormResponderViewProps> = ({
                 {q.type === 'checkboxes' && (
                   <div className="space-y-2 pt-1">
                     {(q.options || []).map((opt, optIdx) => {
-                      const selected = Array.isArray(answers[q.id]) && answers[q.id].includes(opt);
+                      const answer = answers[q.id];
+                      const selected = Array.isArray(answer) && answer.includes(opt);
                       return (
                         <label
                           key={optIdx}

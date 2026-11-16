@@ -1,6 +1,6 @@
-import { Form, UserProfile, FormResponse } from '../types';
+import { Form, UserProfile } from '../types';
 
-export const INITIAL_PROFILES: UserProfile[] = [
+export const STARTER_PROFILES: UserProfile[] = [
   {
     id: 'user-admin-1',
     email: 'admin@college.edu',
@@ -21,13 +21,13 @@ export const INITIAL_PROFILES: UserProfile[] = [
   }
 ];
 
-export const INITIAL_FORMS: Form[] = [
+export const STARTER_FORMS: Form[] = [
   {
     id: 'form-event-hackathon-2026',
     title: 'TechNova 2026: Annual AI & Cloud Hackathon Registration',
     description: 'Welcome to the premier university hackathon of 2026. Join over 300 builders creating next-generation generative AI and cloud infrastructure solutions. Food and swags provided!',
     createdBy: 'user-organizer-1',
-    creatorProfile: INITIAL_PROFILES[1],
+    creatorProfile: STARTER_PROFILES[1],
     status: 'published',
     settings: {
       isPublic: true,
@@ -162,7 +162,7 @@ export const INITIAL_FORMS: Form[] = [
     title: 'Modern Web Architecture & Edge Computing Seminar',
     description: 'A 2-day technical seminar on serverless computing, edge CDNs, and database scaling hosted by the Department of Computer Science.',
     createdBy: 'user-organizer-2',
-    creatorProfile: INITIAL_PROFILES[2],
+    creatorProfile: STARTER_PROFILES[2],
     status: 'published',
     settings: {
       isPublic: true,
@@ -223,7 +223,7 @@ export const INITIAL_FORMS: Form[] = [
     title: 'Department Course Experience & Curriculum Feedback',
     description: 'Anonymous end-of-semester feedback for Fall 2026 coursework. Your constructive input shapes future curriculum improvements.',
     createdBy: 'user-admin-1',
-    creatorProfile: INITIAL_PROFILES[0],
+    creatorProfile: STARTER_PROFILES[0],
     status: 'published',
     settings: {
       isPublic: true,
@@ -276,154 +276,3 @@ export const INITIAL_FORMS: Form[] = [
   }
 ];
 
-export const INITIAL_RESPONSES: FormResponse[] = [
-  {
-    id: 'resp-1',
-    formId: 'form-event-hackathon-2026',
-    respondentEmail: 'arjun.mehta@student.edu',
-    participantName: 'Arjun Mehta',
-    registrationStatus: 'confirmed',
-    checkedInAt: null,
-    submittedAt: '2026-10-15T14:22:00Z',
-    answers: {
-      q1: 'Arjun Mehta',
-      q2: 'arjun.mehta@student.edu',
-      q3: 'Generative AI & Agentic Systems',
-      q4: ['Python (FastAPI, PyTorch)', 'TypeScript / React / Node.js'],
-      q5: '3rd Year Undergraduate',
-      q6: '2026-11-19',
-      q7: 4,
-      q8: 'An intelligent coding assistant for offline edge devices.'
-    }
-  },
-  {
-    id: 'resp-2',
-    formId: 'form-event-hackathon-2026',
-    respondentEmail: 'kavya.nair@student.edu',
-    participantName: 'Kavya Nair',
-    registrationStatus: 'attended',
-    checkedInAt: '2026-10-20T09:15:00Z',
-    submittedAt: '2026-10-16T11:05:00Z',
-    answers: {
-      q1: 'Kavya Nair',
-      q2: 'kavya.nair@student.edu',
-      q3: 'Cloud & Distributed Systems',
-      q4: ['Go / Rust', 'TypeScript / React / Node.js'],
-      q5: 'Final Year Undergraduate',
-      q6: '2026-11-20',
-      q7: 5,
-      q8: 'High-throughput event streaming engine with zero-copy buffering.'
-    }
-  },
-  {
-    id: 'resp-3',
-    formId: 'form-event-hackathon-2026',
-    respondentEmail: 'david.chen@mit.edu',
-    participantName: 'David Chen',
-    registrationStatus: 'registered',
-    checkedInAt: null,
-    submittedAt: '2026-10-18T16:40:00Z',
-    answers: {
-      q1: 'David Chen',
-      q2: 'david.chen@mit.edu',
-      q3: 'Cybersecurity & Zero Trust',
-      q4: ['Python (FastAPI, PyTorch)', 'Go / Rust'],
-      q5: '2nd Year Undergraduate',
-      q6: '2026-11-20',
-      q7: 3,
-      q8: 'Automated policy enforcement tool for Kubernetes clusters.'
-    }
-  },
-  {
-    id: 'resp-4',
-    formId: 'form-event-hackathon-2026',
-    respondentEmail: 'ananya.rao@student.edu',
-    participantName: 'Ananya Rao',
-    registrationStatus: 'cancelled',
-    checkedInAt: null,
-    submittedAt: '2026-10-19T10:12:00Z',
-    answers: {
-      q1: 'Ananya Rao',
-      q2: 'ananya.rao@student.edu',
-      q3: 'FinTech & Open Banking',
-      q4: ['Java / Spring Boot', 'TypeScript / React / Node.js'],
-      q5: '4th Year Undergraduate',
-      q6: '2026-11-20',
-      q7: 4,
-      q8: 'Real-time anti-fraud transaction graph neural network.'
-    }
-  },
-  {
-    id: 'resp-5',
-    formId: 'form-seminar-web3',
-    respondentEmail: 'rahul.verma@student.edu',
-    participantName: 'Rahul Verma',
-    registrationStatus: 'attended',
-    checkedInAt: '2026-10-20T14:05:00Z',
-    submittedAt: '2026-10-14T12:00:00Z',
-    answers: {
-      'sem-q1': 'Rahul Verma',
-      'sem-q2': 'rahul.verma@student.edu',
-      'sem-q3': 'In-Person (On Campus)',
-      'sem-q4': 'Distributed database consistency algorithms and practical Raft consensus.'
-    }
-  },
-  {
-    id: 'resp-6',
-    formId: 'form-seminar-web3',
-    respondentEmail: 'emily.watson@university.edu',
-    participantName: 'Emily Watson',
-    registrationStatus: 'registered',
-    checkedInAt: null,
-    submittedAt: '2026-10-17T09:30:00Z',
-    answers: {
-      'sem-q1': 'Emily Watson',
-      'sem-q2': 'emily.watson@university.edu',
-      'sem-q3': 'Online (Zoom / YouTube Live)',
-      'sem-q4': 'Edge serverless cold start mitigation and WASM runtimes.'
-    }
-  },
-  {
-    id: 'resp-7',
-    formId: 'form-seminar-web3',
-    respondentEmail: 'siddharth.m@student.edu',
-    participantName: 'Siddharth M',
-    registrationStatus: 'confirmed',
-    checkedInAt: null,
-    submittedAt: '2026-10-18T18:15:00Z',
-    answers: {
-      'sem-q1': 'Siddharth M',
-      'sem-q2': 'siddharth.m@student.edu',
-      'sem-q3': 'In-Person (On Campus)',
-      'sem-q4': 'Micro-frontends at scale and module federation.'
-    }
-  },
-  {
-    id: 'resp-8',
-    formId: 'form-course-feedback',
-    respondentEmail: null,
-    participantName: 'Anonymous',
-    registrationStatus: 'confirmed',
-    checkedInAt: null,
-    submittedAt: '2026-10-15T17:00:00Z',
-    answers: {
-      'fb-q1': 'CS305: Database Engineering',
-      'fb-q2': 5,
-      'fb-q3': 'The deep-dive on PostgreSQL indexing and query plan analysis was outstanding.'
-    }
-  },
-  {
-    id: 'resp-9',
-    formId: 'form-course-feedback',
-    respondentEmail: null,
-    participantName: 'Anonymous',
-    registrationStatus: 'confirmed',
-    checkedInAt: null,
-    submittedAt: '2026-10-16T14:45:00Z',
-    answers: {
-      'fb-q1': 'CS301: Distributed Systems',
-      'fb-q2': 4,
-      'fb-q3': 'Would love more hands-on labs with real multi-node network partition testing.'
-    }
-  }
-];

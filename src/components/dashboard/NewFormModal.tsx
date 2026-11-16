@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Calendar, FileText, Sparkles } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { formService } from '../../services/formService';
 import { Form } from '../../types';
 import { generateUUID } from '../../utils/uuid';
+import { getErrorMessage } from '../../utils/errors';
 
 interface NewFormModalProps {
   isOpen: boolean;
@@ -24,12 +25,20 @@ export const NewFormModal: React.FC<NewFormModalProps> = ({
   const [isEvent, setIsEvent] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    setTitle('');
+    setDescription('');
+    setIsEvent(false);
+    setLoading(false);
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (!user) {
-      showToast('Please sign in or select an organizer persona first.', 'error');
+      showToast('Please sign in before creating a form.', 'error');
       return;
     }
 
@@ -44,8 +53,8 @@ export const NewFormModal: React.FC<NewFormModalProps> = ({
             isPublic: true,
             requiresLogin: false,
             allowMultipleResponses: false,
-            isEvent: isEvent,
-            eventDate: isEvent ? new Date(Date.now() + 86400000 * 7).toISOString().slice(0, 16) : null,
+            isEvent,
+            eventDate: isEvent ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() : null,
             eventVenue: isEvent ? 'Main Campus Hall' : '',
             eventCapacity: isEvent ? 100 : null
           },
@@ -54,28 +63,10 @@ export const NewFormModal: React.FC<NewFormModalProps> = ({
                 {
                   id: generateUUID(),
                   formId: '',
-                  title: 'Full Name',
-                  type: 'short_answer',
-                  required: true,
-                  orderIndex: 0,
-                  options: []
-                },
-                {
-                  id: generateUUID(),
-                  formId: '',
-                  title: 'Email Address',
-                  type: 'short_answer',
-                  required: true,
-                  orderIndex: 1,
-                  options: []
-                },
-                {
-                  id: generateUUID(),
-                  formId: '',
                   title: 'Attendance Mode',
                   type: 'multiple_choice',
                   required: true,
-                  orderIndex: 2,
+                  orderIndex: 0,
                   options: ['In-Person', 'Online / Virtual']
                 }
               ]
@@ -94,34 +85,48 @@ export const NewFormModal: React.FC<NewFormModalProps> = ({
         user
       );
 
-      showToast('Form created successfully!', 'success');
+      showToast('Form created successfully.', 'success');
       onFormCreated(created);
       onClose();
-    } catch (err: any) {
-      showToast(err?.message || 'Failed to create form', 'error');
+    } catch (error) {
+      showToast(getErrorMessage(error, 'Failed to create form.'), 'error');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="relative bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4 backdrop-blur-sm"
+      onMouseDown={event => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="new-form-title"
+        className="animate-in fade-in zoom-in-95 relative w-full max-w-lg overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-2xl"
+      >
         <div className="p-6 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-900">Create New Form</h2>
+              <h2 id="new-form-title" className="text-lg font-bold text-slate-900">
+                Create New Form
+              </h2>
               <p className="text-xs text-slate-500">Choose between a general form or an event registration</p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition"
+            aria-label="Close dialog"
+            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
           >
-            <X className="w-5 h-5" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 

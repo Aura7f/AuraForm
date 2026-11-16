@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState } from 'react';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
+import { generateUUID } from '../utils/uuid';
 
 type ToastType = 'success' | 'error' | 'info';
 
@@ -19,10 +20,10 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const showToast = (message: string, type: ToastType = 'info') => {
-    const id = Math.random().toString(36).substring(2, 9);
-    setToasts(prev => [...prev, { id, type, message }]);
+    const id = generateUUID();
+    setToasts(prev => [...prev.slice(-3), { id, type, message }]);
 
-    setTimeout(() => {
+    window.setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 3500);
   };
@@ -35,11 +36,15 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     <ToastContext.Provider value={{ showToast }}>
       {children}
       {/* Toast container */}
-      <div className="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none">
+      <div
+        aria-live="polite"
+        className="pointer-events-none fixed bottom-5 right-5 z-50 flex flex-col space-y-2"
+      >
         {toasts.map(toast => (
           <div
             key={toast.id}
-            className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border text-sm max-w-md transition-all transform animate-in fade-in slide-in-from-bottom-2 ${
+            role={toast.type === 'error' ? 'alert' : 'status'}
+            className={`animate-in fade-in slide-in-from-bottom-2 pointer-events-auto flex max-w-md transform items-center gap-3 rounded-lg border px-4 py-3 text-sm shadow-lg transition-all ${
               toast.type === 'success'
                 ? 'bg-white border-emerald-200 text-emerald-900 shadow-emerald-500/10'
                 : toast.type === 'error'
@@ -52,8 +57,10 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             {toast.type === 'info' && <Info className="w-5 h-5 text-brand-600 shrink-0" />}
             <span className="flex-1 font-medium">{toast.message}</span>
             <button
+              type="button"
               onClick={() => removeToast(toast.id)}
-              className="p-1 text-slate-400 hover:text-slate-600 rounded transition"
+              aria-label="Dismiss notification"
+              className="rounded p-1 text-slate-400 transition hover:text-slate-600"
             >
               <X className="w-4 h-4" />
             </button>

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { ToastProvider } from './context/ToastContext';
+import { ToastProvider, useToast } from './context/ToastContext';
 import { Navbar } from './components/common/Navbar';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { FormBuilderView } from './components/builder/FormBuilderView';
@@ -10,6 +10,7 @@ import { AuthPage } from './components/auth/AuthPage';
 import { NewFormModal } from './components/dashboard/NewFormModal';
 import { Form } from './types';
 import { formService } from './services/formService';
+import { getErrorMessage } from './utils/errors';
 
 type ViewMode = 'dashboard' | 'builder' | 'responder' | 'responses';
 
@@ -28,9 +29,10 @@ const getRouteState = () => {
   };
 };
 
-const FormFlowApp: React.FC = () => {
-  const { user, authError } = useAuth();
-  const [initialRoute] = useState(getRouteState);
+const AuraFormApp: React.FC = () => {
+  const { user, authError, loading: authLoading } = useAuth();
+  const { showToast } = useToast();
+  const [initialRoute] = useState(() => getRouteState());
   const [isSignInPage, setIsSignInPage] = useState(initialRoute.isSignInPage);
   const [currentView, setCurrentView] = useState<ViewMode>(initialRoute.currentView);
   const [selectedFormId, setSelectedFormId] = useState<string | null>(initialRoute.selectedFormId);
@@ -62,10 +64,9 @@ const FormFlowApp: React.FC = () => {
 
   const returnFromSignInPage = () => {
     const returnTo = new URLSearchParams(window.location.search).get('next') || '/';
-    const destination = new URL(returnTo, window.location.origin);
-    if (destination.origin !== window.location.origin) {
-      destination.href = window.location.origin;
-    }
+    const requested = new URL(returnTo, window.location.origin);
+    const destination =
+      requested.origin === window.location.origin ? requested : new URL('/', window.location.origin);
     const routePath = `${destination.pathname}${destination.search}${destination.hash}`;
     window.history.replaceState({}, '', routePath);
     setIsSignInPage(false);
@@ -78,47 +79,24 @@ const FormFlowApp: React.FC = () => {
     if (user && isSignInPage) returnFromSignInPage();
   }, [user, isSignInPage]);
 
-  // Fetch forms whenever user or currentView changes
-  useEffect(() => {
-    let isMounted = true;
-    const fetchForms = async () => {
-      setLoading(true);
-      try {
-        const data = await formService.getForms(user);
-        if (isMounted) {
-          setForms(data);
-          setFormsError(null);
-        }
-      } catch (err) {
-        console.error('Failed to load forms:', err);
-        if (isMounted) {
-          setForms([]);
-          setFormsError(err instanceof Error ? err.message : 'Failed to load forms from the database.');
-        }
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    };
-    fetchForms();
-    return () => {
-      isMounted = false;
-    };
-  }, [user]);
-
-  const loadForms = async () => {
+  const loadForms = useCallback(async () => {
     setLoading(true);
     try {
       const data = await formService.getForms(user);
       setForms(data);
       setFormsError(null);
-    } catch (err) {
-      console.error('Failed to load forms:', err);
+    } catch (error) {
+      console.error('Failed to load forms:', error);
       setForms([]);
-      setFormsError(err instanceof Error ? err.message : 'Failed to load forms from the database.');
+      setFormsError(getErrorMessage(error, 'Failed to load forms from the database.'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    void loadForms();
+  }, [loadForms]);
 
   const handleNavigate = (view: string, formId?: string) => {
     setIsSignInPage(false);
@@ -132,11 +110,17 @@ const FormFlowApp: React.FC = () => {
   };
 
   const handleOpenBuilder = async (formId: string) => {
-    setSelectedFormId(formId);
-    const found = await formService.getFormById(formId);
-    if (found) {
+    try {
+      const found = await formService.getFormById(formId);
+      if (!found) {
+        showToast('This form could not be opened. It may have been deleted.', 'error');
+        return;
+      }
+      setSelectedFormId(formId);
       setActiveForm(found);
       setCurrentView('builder');
+    } catch (error) {
+      showToast(getErrorMessage(error, 'Failed to open the form.'), 'error');
     }
   };
 
@@ -165,8 +149,19 @@ const FormFlowApp: React.FC = () => {
     return <AuthPage onBack={returnFromSignInPage} />;
   }
 
+  if (authLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-teal-600 border-t-transparent" />
+          <p className="text-xs text-slate-500">Checking your session...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-['Inter',sans-serif]">
+    <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900">
       {/* Top Navbar */}
       <Navbar
         currentView={currentView}
@@ -175,7 +170,16 @@ const FormFlowApp: React.FC = () => {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
+        {authError && (
+          <div
+            role="alert"
+            className="mb-6 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800"
+          >
+            {authError}
+          </div>
+        )}
+
         {loading && currentView === 'dashboard' ? (
           <div className="py-24 text-center">
             <div className="w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
@@ -199,6 +203,7 @@ const FormFlowApp: React.FC = () => {
             {currentView === 'builder' && activeForm && (
               <FormBuilderView
                 form={activeForm}
+                currentUser={user}
                 onBack={() => handleNavigate('dashboard')}
                 onPreview={handleOpenResponder}
                 onViewResponses={handleOpenResponses}
@@ -232,7 +237,7 @@ const FormFlowApp: React.FC = () => {
       <footer className="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-400">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <img src="/auraform-icon.png" alt="AuraForm" className="h-5 w-5 object-contain" />
+            <img src="/logo.png" alt="AuraForm" className="h-5 w-5 object-contain" />
             <p>© 2026 AuraForm. Enterprise Forms & Event Management.</p>
           </div>
           <p className="flex items-center gap-2">
@@ -257,7 +262,7 @@ export const App: React.FC = () => {
   return (
     <ToastProvider>
       <AuthProvider>
-        <FormFlowApp />
+        <AuraFormApp />
       </AuthProvider>
     </ToastProvider>
   );

@@ -1,19 +1,5 @@
 import React from 'react';
-import {
-  Trash2,
-  Copy,
-  ChevronUp,
-  ChevronDown,
-  Plus,
-  X,
-  AlignLeft,
-  CheckSquare,
-  CircleDot,
-  ListFilter,
-  Calendar,
-  Sliders,
-  Type
-} from 'lucide-react';
+import { Calendar, CheckSquare, ChevronDown, ChevronUp, CircleDot, Copy, Plus, Trash2, X } from 'lucide-react';
 import { Question, QuestionType } from '../../types';
 
 interface QuestionEditorProps {
@@ -27,14 +13,14 @@ interface QuestionEditorProps {
   onMoveDown: () => void;
 }
 
-const QUESTION_TYPES: { type: QuestionType; label: string; icon: React.ReactNode }[] = [
-  { type: 'short_answer', label: 'Short answer', icon: <Type className="w-4 h-4 text-teal-600" /> },
-  { type: 'paragraph', label: 'Paragraph', icon: <AlignLeft className="w-4 h-4 text-teal-600" /> },
-  { type: 'multiple_choice', label: 'Multiple choice', icon: <CircleDot className="w-4 h-4 text-teal-600" /> },
-  { type: 'checkboxes', label: 'Checkboxes', icon: <CheckSquare className="w-4 h-4 text-teal-600" /> },
-  { type: 'dropdown', label: 'Dropdown', icon: <ListFilter className="w-4 h-4 text-teal-600" /> },
-  { type: 'date', label: 'Date', icon: <Calendar className="w-4 h-4 text-teal-600" /> },
-  { type: 'linear_scale', label: 'Linear scale', icon: <Sliders className="w-4 h-4 text-teal-600" /> }
+const QUESTION_TYPES: { type: QuestionType; label: string }[] = [
+  { type: 'short_answer', label: 'Short answer' },
+  { type: 'paragraph', label: 'Paragraph' },
+  { type: 'multiple_choice', label: 'Multiple choice' },
+  { type: 'checkboxes', label: 'Checkboxes' },
+  { type: 'dropdown', label: 'Dropdown' },
+  { type: 'date', label: 'Date' },
+  { type: 'linear_scale', label: 'Linear scale' }
 ];
 
 export const QuestionEditor: React.FC<QuestionEditorProps> = ({
@@ -162,8 +148,10 @@ export const QuestionEditor: React.FC<QuestionEditorProps> = ({
 
                 {(question.options || []).length > 1 && (
                   <button
+                    type="button"
                     onClick={() => handleRemoveOption(optIdx)}
-                    className="p-1 text-slate-400 hover:text-rose-500 rounded transition"
+                    aria-label={`Remove option ${optIdx + 1}`}
+                    className="rounded p-1 text-slate-400 transition hover:text-rose-500"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>

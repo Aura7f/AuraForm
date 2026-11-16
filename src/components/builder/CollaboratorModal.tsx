@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
-import { X, UserPlus, Users, Trash2, Shield, Mail } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Mail, Trash2, UserPlus, Users, X } from 'lucide-react';
 import { Form, CollaboratorRole } from '../../types';
 import { formService } from '../../services/formService';
 import { useToast } from '../../context/ToastContext';
+import { getErrorMessage } from '../../utils/errors';
+import { isValidEmail } from '../../utils/validation';
 
 interface CollaboratorModalProps {
   form: Form;
@@ -22,55 +24,81 @@ export const CollaboratorModal: React.FC<CollaboratorModalProps> = ({
   const [role, setRole] = useState<CollaboratorRole>('editor');
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    setEmail('');
+    setRole('editor');
+    setLoading(false);
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
-  const handleAdd = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email.trim()) return;
+  const handleAdd = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const cleanEmail = email.trim().toLowerCase();
+    if (!isValidEmail(cleanEmail)) {
+      showToast('Enter a valid email address.', 'error');
+      return;
+    }
 
     setLoading(true);
     try {
-      await formService.addCollaborator(form.id, email.trim(), role);
-      showToast(`Added ${email} as collaborator (${role})`, 'success');
+      const collaborator = await formService.addCollaborator(form.id, cleanEmail, role);
+      onUpdated({ ...form, collaborators: [...(form.collaborators || []), collaborator] });
+      showToast(`Added ${collaborator.userEmail} as ${role}.`, 'success');
       setEmail('');
-      const refreshed = await formService.getFormById(form.id);
-      if (refreshed) onUpdated(refreshed);
-    } catch (err: any) {
-      showToast(err?.message || 'Failed to add collaborator', 'error');
+    } catch (error) {
+      showToast(getErrorMessage(error, 'Failed to add collaborator.'), 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRemove = async (collabId: string, collabEmail: string) => {
+  const handleRemove = async (collaboratorId: string, collaboratorEmail: string) => {
     try {
-      await formService.removeCollaborator(form.id, collabId);
-      showToast(`Removed ${collabEmail}`, 'info');
-      const refreshed = await formService.getFormById(form.id);
-      if (refreshed) onUpdated(refreshed);
-    } catch (err: any) {
-      showToast(err?.message || 'Failed to remove collaborator', 'error');
+      await formService.removeCollaborator(form.id, collaboratorId);
+      onUpdated({
+        ...form,
+        collaborators: (form.collaborators || []).filter(c => c.id !== collaboratorId)
+      });
+      showToast(`Removed ${collaboratorEmail}.`, 'info');
+    } catch (error) {
+      showToast(getErrorMessage(error, 'Failed to remove collaborator.'), 'error');
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="relative bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4 backdrop-blur-sm"
+      onMouseDown={event => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="collaborators-title"
+        className="animate-in fade-in zoom-in-95 relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-2xl"
+      >
         <div className="p-6 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center">
               <Users className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900">Manage Form Collaborators</h2>
+              <h2 id="collaborators-title" className="text-base font-bold text-slate-900">
+                Manage Form Collaborators
+              </h2>
               <p className="text-xs text-slate-500">Allow other organizers to edit or view this form</p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition"
+            aria-label="Close dialog"
+            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
           >
-            <X className="w-5 h-5" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
@@ -152,9 +180,11 @@ export const CollaboratorModal: React.FC<CollaboratorModalProps> = ({
                     </div>
 
                     <button
+                      type="button"
                       onClick={() => handleRemove(c.id, c.userEmail)}
-                      className="p-1 text-slate-400 hover:text-rose-600 rounded transition"
-                      title="Remove Collaborator"
+                      className="rounded p-1 text-slate-400 transition hover:text-rose-600"
+                      title="Remove collaborator"
+                      aria-label={`Remove ${c.userEmail}`}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -167,8 +197,9 @@ export const CollaboratorModal: React.FC<CollaboratorModalProps> = ({
 
         <div className="p-4 bg-slate-50 border-t border-slate-100 text-right">
           <button
+            type="button"
             onClick={onClose}
-            className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg transition"
+            className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
           >
             Done
           </button>

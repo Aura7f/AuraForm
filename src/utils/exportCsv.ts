@@ -5,10 +5,7 @@ export const exportResponsesToCsv = (
   questions: Question[],
   responses: FormResponse[]
 ) => {
-  if (!responses || responses.length === 0) {
-    alert('No responses available to export.');
-    return;
-  }
+  if (!responses || responses.length === 0) return;
 
   // Header row
   const headers = [
@@ -60,12 +57,15 @@ export const exportResponsesToCsv = (
     rows.push(rowValues.map(v => `"${v}"`).join(','));
   });
 
-  const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(rows.join('\n'));
+  const blob = new Blob(['\uFEFF' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const downloadUrl = URL.createObjectURL(blob);
   const link = document.createElement('a');
-  link.setAttribute('href', csvContent);
   const safeTitle = form.title.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 30);
-  link.setAttribute('download', `${safeTitle}_responses.csv`);
+
+  link.href = downloadUrl;
+  link.download = `${safeTitle || 'form'}_responses.csv`;
   document.body.appendChild(link);
   link.click();
-  document.body.removeChild(link);
+  link.remove();
+  URL.revokeObjectURL(downloadUrl);
 };

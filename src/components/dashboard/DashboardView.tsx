@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FileText,
   Calendar,
@@ -16,17 +16,26 @@ import {
   Globe,
   MoreVertical,
   CheckCircle2,
-  AlertCircle,
-  Database,
   UploadCloud,
-  RefreshCw,
-  ShieldCheck
+  RefreshCw
 } from 'lucide-react';
 import { Form, UserProfile } from '../../types';
 import { formService } from '../../services/formService';
 import { useToast } from '../../context/ToastContext';
 import { isSupabaseConfigured } from '../../lib/supabase';
+import { getErrorMessage } from '../../utils/errors';
+import { buildFormUrl } from '../../utils/links';
 import { MemberManagement } from './MemberManagement';
+
+type FormFilter = 'all' | 'published' | 'draft' | 'closed' | 'events';
+
+const FILTER_TABS: { id: FormFilter; label: string }[] = [
+  { id: 'all', label: 'All Forms' },
+  { id: 'published', label: 'Published' },
+  { id: 'draft', label: 'Drafts' },
+  { id: 'closed', label: 'Closed' },
+  { id: 'events', label: 'Events' }
+];
 
 interface DashboardViewProps {
   forms: Form[];
@@ -51,24 +60,41 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 }) => {
   const { showToast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'published' | 'draft' | 'closed' | 'events'>('all');
+  const [filterType, setFilterType] = useState<FormFilter>('all');
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [seeding, setSeeding] = useState(false);
+  const actionMenuRef = useRef<HTMLDivElement>(null);
   const canManageForms = currentUser?.role === 'admin' || currentUser?.role === 'organizer';
+
+  useEffect(() => {
+    if (!activeMenuId) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (actionMenuRef.current && !actionMenuRef.current.contains(event.target as Node)) {
+        setActiveMenuId(null);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setActiveMenuId(null);
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activeMenuId]);
 
   const handleSeedStarterForms = async () => {
     if (!currentUser) return;
     setSeeding(true);
     try {
-      const res = await formService.seedStarterFormsToSupabase(currentUser);
-      if (res.success) {
-        showToast(res.message, 'success');
-        onRefreshForms();
-      } else {
-        showToast(res.message, 'error');
-      }
-    } catch (err: any) {
-      showToast(err?.message || 'Failed to sync starter forms', 'error');
+      const result = await formService.seedStarterFormsToSupabase(currentUser);
+      showToast(result.message, result.success ? 'success' : 'error');
+      if (result.success) onRefreshForms();
+    } catch (error) {
+      showToast(getErrorMessage(error, 'Failed to seed starter forms.'), 'error');
     } finally {
       setSeeding(false);
     }
@@ -83,20 +109,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return forms.filter(f => f.settings.isEvent && f.status === 'published').length;
   }, [forms]);
 
-  // Filtered forms
   const filteredForms = useMemo(() => {
-    return forms.filter(f => {
-      const matchesSearch =
-        f.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        f.description.toLowerCase().includes(searchQuery.toLowerCase());
+    const query = searchQuery.trim().toLowerCase();
 
+    return forms.filter(form => {
+      const matchesSearch =
+        !query ||
+        form.title.toLowerCase().includes(query) ||
+        form.description.toLowerCase().includes(query);
       if (!matchesSearch) return false;
 
-      if (filterType === 'published') return f.status === 'published';
-      if (filterType === 'draft') return f.status === 'draft';
-      if (filterType === 'closed') return f.status === 'closed';
-      if (filterType === 'events') return f.settings.isEvent;
-
+      if (filterType === 'events') return form.settings.isEvent;
+      if (filterType !== 'all') return form.status === filterType;
       return true;
     });
   }, [forms, searchQuery, filterType]);
@@ -105,30 +129,34 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     if (!currentUser) return;
     try {
       const duplicated = await formService.duplicateForm(formId, currentUser);
-      showToast(`Duplicated as "${duplicated.title}"`, 'success');
+      showToast(`Duplicated as "${duplicated.title}".`, 'success');
       onRefreshForms();
-    } catch (err: any) {
-      showToast(err?.message || 'Failed to duplicate form', 'error');
+    } catch (error) {
+      showToast(getErrorMessage(error, 'Failed to duplicate form.'), 'error');
     }
   };
 
   const handleDelete = async (formId: string, title: string) => {
-    if (!confirm(`Are you sure you want to delete "${title}"? This cannot be undone.`)) {
+    if (!window.confirm(`Are you sure you want to delete "${title}"? This cannot be undone.`)) {
       return;
     }
     try {
       await formService.deleteForm(formId);
       showToast('Form deleted successfully.', 'success');
       onRefreshForms();
-    } catch (err: any) {
-      showToast(err?.message || 'Failed to delete form', 'error');
+    } catch (error) {
+      showToast(getErrorMessage(error, 'Failed to delete form.'), 'error');
     }
   };
 
-  const handleCopyShareLink = (formId: string) => {
-    const url = `${window.location.origin}?form=${formId}`;
-    navigator.clipboard.writeText(url);
-    showToast('Shareable form link copied to clipboard!', 'success');
+  const handleCopyShareLink = async (formId: string) => {
+    const url = buildFormUrl(formId);
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast('Shareable form link copied to clipboard.', 'success');
+    } catch {
+      showToast('Could not copy the link. Copy it from the address bar instead.', 'error');
+    }
   };
 
   return (
@@ -150,11 +178,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <button
                 onClick={handleSeedStarterForms}
                 disabled={seeding}
-                className="flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-semibold text-xs rounded-lg shadow-xs transition disabled:opacity-50"
-                title="Preserves existing database forms while ensuring default university starter forms exist"
+                className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+                title="Adds the starter forms only when the database has no forms yet"
               >
-                <UploadCloud className={`w-3.5 h-3.5 text-teal-600 ${seeding ? 'animate-bounce' : ''}`} />
-                <span>{seeding ? 'Syncing...' : 'Sync Starter Forms to DB'}</span>
+                <UploadCloud className={`h-3.5 w-3.5 text-teal-600 ${seeding ? 'animate-pulse' : ''}`} />
+                <span>{seeding ? 'Syncing...' : 'Add Starter Forms'}</span>
               </button>
             )}
 
@@ -257,16 +285,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* Filter Tabs */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
-          {[
-            { id: 'all', label: 'All Forms' },
-            { id: 'published', label: 'Published' },
-            { id: 'draft', label: 'Drafts' },
-            { id: 'closed', label: 'Closed' },
-            { id: 'events', label: 'Events' }
-          ].map(tab => (
+          {FILTER_TABS.map(tab => (
             <button
               key={tab.id}
-              onClick={() => setFilterType(tab.id as any)}
+              onClick={() => setFilterType(tab.id)}
               className={`px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition ${
                 filterType === tab.id
                   ? 'bg-teal-600 text-white shadow-sm'
@@ -304,15 +326,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredForms.map(form => {
             const isOwnerOrEditor = Boolean(
-              canManageForms && (
-                currentUser?.role === 'admin' ||
-                form.createdBy === currentUser?.id ||
-                form.collaborators?.some(c =>
-                  c.role === 'editor' &&
-                  (c.userEmail === currentUser?.email || c.userId === currentUser?.id)
-                )
-              )
+              canManageForms &&
+                (currentUser?.role === 'admin' ||
+                  form.createdBy === currentUser?.id ||
+                  form.collaborators?.some(
+                    collaborator =>
+                      collaborator.role === 'editor' &&
+                      (collaborator.userEmail === currentUser?.email ||
+                        collaborator.userId === currentUser?.id)
+                  ))
             );
+            const canDeleteForm = currentUser?.role === 'admin' || form.createdBy === currentUser?.id;
 
             return (
               <div
@@ -356,19 +380,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
                     {/* Action Dropdown Toggle */}
                     {isOwnerOrEditor && (
-                      <div className="relative">
+                      <div className="relative" ref={activeMenuId === form.id ? actionMenuRef : undefined}>
                         <button
+                          type="button"
                           onClick={() => setActiveMenuId(activeMenuId === form.id ? null : form.id)}
-                          className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition"
+                          aria-label={`Open actions for ${form.title}`}
+                          aria-expanded={activeMenuId === form.id}
+                          className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
                         >
-                          <MoreVertical className="w-4 h-4" />
+                          <MoreVertical className="h-4 w-4" />
                         </button>
 
                         {activeMenuId === form.id && (
-                          <div
-                            className="absolute right-0 mt-1 w-44 bg-white rounded-lg shadow-xl border border-slate-200 py-1 z-20 animate-in fade-in"
-                            onMouseLeave={() => setActiveMenuId(null)}
-                          >
+                          <div className="animate-in fade-in absolute right-0 z-20 mt-1 w-44 rounded-lg border border-slate-200 bg-white py-1 shadow-xl">
                             <button
                               onClick={() => {
                                 handleDuplicate(form.id);
@@ -389,17 +413,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                               <Share2 className="w-3.5 h-3.5" />
                               <span>Copy Share Link</span>
                             </button>
-                            <div className="my-1 border-t border-slate-100" />
-                            <button
-                              onClick={() => {
-                                handleDelete(form.id, form.title);
-                                setActiveMenuId(null);
-                              }}
-                              className="w-full text-left px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 flex items-center gap-2"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              <span>Delete Form</span>
-                            </button>
+                            {canDeleteForm && (
+                              <>
+                                <div className="my-1 border-t border-slate-100" />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleDelete(form.id, form.title);
+                                    setActiveMenuId(null);
+                                  }}
+                                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-rose-600 hover:bg-rose-50"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                  <span>Delete Form</span>
+                                </button>
+                              </>
+                            )}
                           </div>
                         )}
                       </div>
@@ -407,12 +436,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </div>
 
                   {/* Form Title & Description */}
-                  <h3
-                    onClick={() => isOwnerOrEditor ? onOpenFormBuilder(form.id) : onOpenFormResponder(form.id)}
-                    className="text-base font-bold text-slate-900 group-hover:text-teal-700 transition cursor-pointer line-clamp-1"
+                  <button
+                    type="button"
+                    onClick={() => (isOwnerOrEditor ? onOpenFormBuilder(form.id) : onOpenFormResponder(form.id))}
+                    className="line-clamp-1 block w-full text-left text-base font-bold text-slate-900 transition group-hover:text-teal-700"
                   >
                     {form.title}
-                  </h3>
+                  </button>
                   <p className="text-xs text-slate-500 mt-1.5 line-clamp-2 leading-relaxed">
                     {form.description || 'No description provided.'}
                   </p>
@@ -440,7 +470,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <div className="px-5 py-3 bg-slate-50/70 border-t border-slate-100 flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
                     <Users className="w-3.5 h-3.5 text-slate-400" />
-                    <span>{form.responseCount || 0} responses</span>
+                    <span>
+                      {form.responseCount || 0} response{(form.responseCount || 0) === 1 ? '' : 's'}
+                    </span>
                   </div>
 
                   <div className="flex items-center gap-1">
@@ -477,7 +509,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     {isOwnerOrEditor && (
                       <button
                         onClick={() => onOpenFormBuilder(form.id)}
-                        className="ml-1 px-2.5 py-1 text-xs font-semibold bg-teal-600 hover:bg-teal-700 text-white rounded-md transition shadow-xs"
+                        className="ml-1 rounded-md bg-teal-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-teal-700"
                       >
                         Edit
                       </button>

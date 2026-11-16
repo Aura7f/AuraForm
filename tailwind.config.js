@@ -1,3 +1,5 @@
+import animate from 'tailwindcss-animate';
+
 /** @type {import('tailwindcss').Config} */
 const forest = {
   50: '#f0f4f0',
@@ -56,5 +58,5 @@ export default {
       }
     },
   },
-  plugins: [],
+  plugins: [animate],
 }

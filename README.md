@@ -2,15 +2,15 @@
 
 **AuraForm** is a modern, responsive full-stack web application designed for creating and managing surveys, evaluations, event registrations, workshops, seminars, and university/college activities.
 
-Built with **React 18**, **TypeScript**, **Tailwind CSS**, and **Supabase (PostgreSQL 15+, Auth, Realtime & RLS)** with a high-performance offline/local fallback.
+Built with **React 18**, **TypeScript**, **Tailwind CSS**, and **Supabase (PostgreSQL, Auth & Row Level Security)**. A configured Supabase project is required for forms and authentication.
 
 ---
 
 ## 🌟 Key Features
 
 1. **Authentication & Role-Based Access Control (RBAC)**:
-   - Pre-configured roles: `admin` (global control), `organizer` (owns forms & shared events), and `user` (respondent).
-   - Persona switcher built-in for instant verification of permissions.
+   - Roles: `admin` (global control), `organizer` (owns forms & shared events), and `user` (respondent).
+   - Dashboard **Member access** panel for admins and organizers to adjust roles.
    - Email/password and Google authentication powered by Supabase Auth.
 
 2. **Form & Event Builder**:
@@ -39,10 +39,10 @@ Built with **React 18**, **TypeScript**, **Tailwind CSS**, and **Supabase (Postg
 
 5. **Public Form Responder**:
    - Google Forms aesthetic: distraction-free, mobile-first responsive layout.
-   - Client-side validation: Required question checks, email format checks, and range bounds.
-   - Anti-duplicate submission protection.
-   - Deadline and response limit enforcement.
-   - Shareable links: Access any form via `http://localhost:5173/?form=<form-id>`.
+   - Client-side validation: required question checks, email format checks, and range bounds.
+   - Draft answers survive the sign-in round-trip via `sessionStorage`.
+   - Duplicate-submission protection and deadline checks.
+   - Shareable links: access any published public form via `http://localhost:5173/?form=<form-id>`.
 
 6. **Analytics & Responses Dashboard**:
    - **Summary Tab**:
@@ -67,15 +67,20 @@ Built with **React 18**, **TypeScript**, **Tailwind CSS**, and **Supabase (Postg
 | **Frontend Framework** | React 18 + TypeScript |
 | **Build & Dev Server** | Vite 5 (HMR, minimal memory overhead) |
 | **Styling** | Tailwind CSS + Lucide Icons |
-| **Backend & Database** | Supabase (PostgreSQL 15+, Auth, Row Level Security) |
-| **Data Layer** | Hybrid Client (`formService.ts`) — connects directly to Supabase with local-storage fallback |
+| **Backend & Database** | Supabase (PostgreSQL, Auth, Row Level Security) |
+| **Data Layer** | Supabase client (`formService.ts`) |
 | **Platform** | Linux ARM64 (Android PRoot Ubuntu compatibility verified) |
 
 ---
 
 ## 🚀 Getting Started
 
-### 1. Start Development Server
+### 1. Configure Supabase
+
+Complete the [Supabase setup](#supabase-setup) below first. AuraForm has no offline data layer: without
+valid `VITE_SUPABASE_*` credentials it shows a configuration message instead of forms.
+
+### 2. Start Development Server
 
 AuraForm is already installed and built in this directory. To launch the server:
 

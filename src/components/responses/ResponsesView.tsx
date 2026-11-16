@@ -1,24 +1,20 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
-  Download,
-  Users,
-  Calendar,
   CheckCircle2,
-  Clock,
   ChevronLeft,
   ChevronRight,
+  Download,
   Eye,
-  Filter,
   Search,
   UserCheck,
-  XCircle,
-  BarChart3
+  Users
 } from 'lucide-react';
-import { Form, FormResponse, RegistrationStatus, Question } from '../../types';
+import { Form, FormResponse, RegistrationStatus } from '../../types';
 import { formService } from '../../services/formService';
 import { exportResponsesToCsv } from '../../utils/exportCsv';
 import { useToast } from '../../context/ToastContext';
+import { getErrorMessage } from '../../utils/errors';
 
 interface ResponsesViewProps {
   formId: string;
@@ -41,23 +37,24 @@ export const ResponsesView: React.FC<ResponsesViewProps> = ({
   const [attendanceFilter, setAttendanceFilter] = useState<'all' | RegistrationStatus>('all');
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, [formId]);
+
+  useEffect(() => {
+    setIndividualIndex(index => Math.min(index, Math.max(0, responses.length - 1)));
+  }, [responses.length]);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [formData, respData] = await Promise.all([
+      const [formData, responseData] = await Promise.all([
         formService.getFormById(formId),
         formService.getFormResponses(formId)
       ]);
       setForm(formData);
-      setResponses(respData);
-      if (formData?.settings.isEvent) {
-        // default to attendance or summary
-      }
-    } catch (err: any) {
-      showToast(err?.message || 'Failed to load responses', 'error');
+      setResponses(responseData);
+    } catch (error) {
+      showToast(getErrorMessage(error, 'Failed to load responses.'), 'error');
     } finally {
       setLoading(false);
     }
@@ -66,19 +63,17 @@ export const ResponsesView: React.FC<ResponsesViewProps> = ({
   const handleStatusChange = async (responseId: string, newStatus: RegistrationStatus) => {
     try {
       await formService.updateAttendance(formId, responseId, newStatus);
-      showToast(`Updated participant status to ${newStatus}`, 'success');
-      // Refresh responses
-      const updated = await formService.getFormResponses(formId);
-      setResponses(updated);
-    } catch (err: any) {
-      showToast(err?.message || 'Failed to update attendance', 'error');
+      showToast(`Participant marked as ${newStatus}.`, 'success');
+      setResponses(await formService.getFormResponses(formId));
+    } catch (error) {
+      showToast(getErrorMessage(error, 'Failed to update attendance.'), 'error');
     }
   };
 
   const handleExportCsv = () => {
     if (!form) return;
     exportResponsesToCsv(form, form.questions || [], responses);
-    showToast('Exported CSV successfully!', 'success');
+    showToast('CSV exported.', 'success');
   };
 
   // Filtered participants for attendance table
@@ -96,13 +91,15 @@ export const ResponsesView: React.FC<ResponsesViewProps> = ({
     });
   }, [responses, attendanceSearch, attendanceFilter]);
 
-  // Attendance stats
   const attendanceStats = useMemo(() => {
     const total = responses.length;
-    const attended = responses.filter(r => r.registrationStatus === 'attended').length;
-    const confirmed = responses.filter(r => r.registrationStatus === 'confirmed').length;
+    const registered = responses.filter(
+      response => (response.registrationStatus || 'registered') === 'registered'
+    ).length;
+    const attended = responses.filter(response => response.registrationStatus === 'attended').length;
+    const confirmed = responses.filter(response => response.registrationStatus === 'confirmed').length;
     const rate = total > 0 ? Math.round((attended / total) * 100) : 0;
-    return { total, attended, confirmed, rate };
+    return { total, registered, attended, confirmed, rate };
   }, [responses]);
 
   if (loading) {
@@ -230,8 +227,8 @@ export const ResponsesView: React.FC<ResponsesViewProps> = ({
               {form.settings.isEvent && (
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <div>
-                    <span className="text-[11px] font-semibold text-slate-400 uppercase">Registered</span>
-                    <p className="text-xl font-bold text-slate-900 mt-0.5">{attendanceStats.total}</p>
+                    <span className="text-[11px] font-semibold uppercase text-slate-400">Registered</span>
+                    <p className="mt-0.5 text-xl font-bold text-slate-900">{attendanceStats.registered}</p>
                   </div>
                   <div>
                     <span className="text-[11px] font-semibold text-slate-400 uppercase">Confirmed</span>
@@ -541,7 +538,7 @@ export const ResponsesView: React.FC<ResponsesViewProps> = ({
                               {p.registrationStatus !== 'attended' ? (
                                 <button
                                   onClick={() => handleStatusChange(p.id, 'attended')}
-                                  className="px-2.5 py-1 text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition shadow-xs"
+                                  className="rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-emerald-700"
                                 >
                                   Check In
                                 </button>

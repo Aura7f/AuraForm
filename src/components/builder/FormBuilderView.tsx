@@ -1,29 +1,30 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ArrowLeft,
-  Save,
-  Eye,
-  Share2,
-  Users,
-  Settings as SettingsIcon,
-  HelpCircle,
-  Plus,
+  BarChart3,
   Calendar,
-  Globe,
-  Lock,
+  Check,
   Clock,
+  Eye,
   MapPin,
-  Check
+  Save,
+  Settings as SettingsIcon,
+  Share2,
+  Users
 } from 'lucide-react';
-import { Form, Question, FormStatus, QuestionType } from '../../types';
+import { Form, Question, FormStatus, QuestionType, UserProfile } from '../../types';
 import { QuestionEditor } from './QuestionEditor';
 import { CollaboratorModal } from './CollaboratorModal';
 import { formService } from '../../services/formService';
 import { useToast } from '../../context/ToastContext';
 import { generateUUID } from '../../utils/uuid';
+import { getErrorMessage } from '../../utils/errors';
+import { fromDateTimeLocalValue, toDateTimeLocalValue } from '../../utils/dateTime';
+import { buildFormUrl } from '../../utils/links';
 
 interface FormBuilderViewProps {
   form: Form;
+  currentUser: UserProfile | null;
   onBack: () => void;
   onPreview: (formId: string) => void;
   onViewResponses: (formId: string) => void;
@@ -32,6 +33,7 @@ interface FormBuilderViewProps {
 
 export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
   form: initialForm,
+  currentUser,
   onBack,
   onPreview,
   onViewResponses,
@@ -43,25 +45,54 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
   const [isCollabOpen, setIsCollabOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const canManageCollaborators = Boolean(
+    currentUser && (currentUser.role === 'admin' || form.createdBy === currentUser.id)
+  );
 
-  // Auto/Manual Save
-  const handleSave = async (updatedData?: Partial<Form>) => {
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  const handleSave = async (updatedData?: Partial<Form>): Promise<boolean> => {
+    if (isSaving) return false;
+
     setIsSaving(true);
     try {
-      const dataToSave = {
-        ...form,
-        ...(updatedData || {})
-      };
-      const saved = await formService.updateForm(form.id, dataToSave);
+      const saved = await formService.updateForm(form.id, { ...form, ...(updatedData || {}) });
       setForm(saved);
       onUpdated(saved);
       setHasUnsavedChanges(false);
-      showToast('Form saved successfully!', 'success');
-    } catch (err: any) {
-      showToast(err?.message || 'Failed to save form', 'error');
+      showToast('Form saved successfully.', 'success');
+      return true;
+    } catch (error) {
+      showToast(getErrorMessage(error, 'Failed to save form.'), 'error');
+      return false;
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleBack = () => {
+    if (hasUnsavedChanges && !window.confirm('Discard your unsaved changes?')) return;
+    onBack();
+  };
+
+  const handlePreview = async () => {
+    if (hasUnsavedChanges && !(await handleSave())) return;
+    onPreview(form.id);
+  };
+
+  const handleViewResponses = async () => {
+    if (hasUnsavedChanges && !(await handleSave())) return;
+    onViewResponses(form.id);
   };
 
   const updateFormFields = (updates: Partial<Form>) => {
@@ -80,61 +111,70 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
     setHasUnsavedChanges(true);
   };
 
+  const withQuestionOrder = (questions: Question[]): Question[] =>
+    questions.map((question, index) => ({ ...question, formId: form.id, orderIndex: index }));
+
   // Question operations
   const handleAddQuestion = (type: QuestionType = 'short_answer') => {
-    const newQ: Question = {
+    const newQuestion: Question = {
       id: generateUUID(),
       formId: form.id,
       title: 'Untitled Question',
       type,
       required: false,
-      orderIndex: (form.questions?.length || 0),
+      orderIndex: form.questions?.length || 0,
       options: ['multiple_choice', 'checkboxes', 'dropdown'].includes(type)
         ? ['Option 1', 'Option 2']
         : []
     };
 
-    const updatedQuestions = [...(form.questions || []), newQ];
-    updateFormFields({ questions: updatedQuestions });
+    updateFormFields({ questions: withQuestionOrder([...(form.questions || []), newQuestion]) });
   };
 
-  const handleUpdateQuestion = (qId: string, updates: Partial<Question>) => {
-    const updated = (form.questions || []).map(q =>
-      q.id === qId ? { ...q, ...updates } : q
+  const handleUpdateQuestion = (questionId: string, updates: Partial<Question>) => {
+    const updated = (form.questions || []).map(question =>
+      question.id === questionId ? { ...question, ...updates } : question
     );
     updateFormFields({ questions: updated });
   };
 
   const handleDuplicateQuestion = (index: number) => {
-    const qToCopy = (form.questions || [])[index];
+    const source = (form.questions || [])[index];
+    if (!source) return;
+
     const duplicated: Question = {
-      ...qToCopy,
+      ...source,
       id: generateUUID(),
-      title: `${qToCopy.title} (Copy)`,
-      orderIndex: index + 1
+      title: `${source.title} (Copy)`
     };
 
     const updated = [...(form.questions || [])];
     updated.splice(index + 1, 0, duplicated);
-    updateFormFields({ questions: updated });
+    updateFormFields({ questions: withQuestionOrder(updated) });
   };
 
-  const handleDeleteQuestion = (qId: string) => {
-    const updated = (form.questions || []).filter(q => q.id !== qId);
-    updateFormFields({ questions: updated });
+  const handleDeleteQuestion = (questionId: string) => {
+    updateFormFields({
+      questions: withQuestionOrder((form.questions || []).filter(q => q.id !== questionId))
+    });
   };
 
   const handleMoveQuestion = (fromIndex: number, toIndex: number) => {
     const questions = [...(form.questions || [])];
     const [moved] = questions.splice(fromIndex, 1);
+    if (!moved) return;
     questions.splice(toIndex, 0, moved);
-    updateFormFields({ questions });
+    updateFormFields({ questions: withQuestionOrder(questions) });
   };
 
-  const handleShare = () => {
-    const url = `${window.location.origin}?form=${form.id}`;
-    navigator.clipboard.writeText(url);
-    showToast('Shareable form link copied to clipboard!', 'success');
+  const handleShare = async () => {
+    const url = buildFormUrl(form.id);
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast('Shareable form link copied to clipboard.', 'success');
+    } catch {
+      showToast('Could not copy the link.', 'error');
+    }
   };
 
   return (
@@ -143,8 +183,9 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
       <div className="sticky top-16 z-30 bg-slate-50/95 backdrop-blur-sm py-3 border-b border-slate-200 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
           <button
-            onClick={onBack}
-            className="p-1.5 text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-200 transition"
+            type="button"
+            onClick={handleBack}
+            className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-200 hover:text-slate-800"
             title="Back to Dashboard"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -172,10 +213,9 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
           {/* Status selector */}
           <select
             value={form.status}
-            onChange={e => {
-              const newStatus = e.target.value as FormStatus;
-              updateFormFields({ status: newStatus });
-              handleSave({ status: newStatus });
+            onChange={event => {
+              const status = event.target.value as FormStatus;
+              void handleSave({ status });
             }}
             className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border focus:outline-none cursor-pointer ${
               form.status === 'published'
@@ -191,14 +231,17 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
           </select>
 
           {/* Collaborators Button */}
-          <button
-            onClick={() => setIsCollabOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition"
-            title="Share with other organizers"
-          >
-            <Users className="w-3.5 h-3.5 text-teal-600" />
-            <span className="hidden sm:inline">Collaborate</span>
-          </button>
+          {canManageCollaborators && (
+            <button
+              type="button"
+              onClick={() => setIsCollabOpen(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+              title="Share with other organizers"
+            >
+              <Users className="h-3.5 w-3.5 text-teal-600" />
+              <span className="hidden sm:inline">Collaborate</span>
+            </button>
+          )}
 
           {/* Share button */}
           <button
@@ -210,13 +253,25 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
             <span className="hidden sm:inline">Share</span>
           </button>
 
+          {/* Responses button */}
+          <button
+            type="button"
+            onClick={handleViewResponses}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+            title="View responses and analytics"
+          >
+            <BarChart3 className="h-3.5 w-3.5 text-teal-600" />
+            <span className="hidden sm:inline">Responses</span>
+          </button>
+
           {/* Preview button */}
           <button
-            onClick={() => onPreview(form.id)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition"
+            type="button"
+            onClick={handlePreview}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
             title="Preview as respondent"
           >
-            <Eye className="w-3.5 h-3.5 text-teal-600" />
+            <Eye className="h-3.5 w-3.5 text-teal-600" />
             <span className="hidden sm:inline">Preview</span>
           </button>
 
@@ -420,9 +475,11 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
                 </div>
                 <input
                   type="datetime-local"
-                  value={form.settings.deadline ? form.settings.deadline.slice(0, 16) : ''}
-                  onChange={e => updateSettings({ deadline: e.target.value ? new Date(e.target.value).toISOString() : null })}
-                  className="px-3 py-1.5 text-xs border border-slate-300 rounded-lg"
+                  value={toDateTimeLocalValue(form.settings.deadline)}
+                  onChange={event =>
+                    updateSettings({ deadline: fromDateTimeLocalValue(event.target.value) })
+                  }
+                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs"
                 />
               </div>
             </div>
@@ -456,9 +513,11 @@ export const FormBuilderView: React.FC<FormBuilderViewProps> = ({
                   </label>
                   <input
                     type="datetime-local"
-                    value={form.settings.eventDate ? form.settings.eventDate.slice(0, 16) : ''}
-                    onChange={e => updateSettings({ eventDate: e.target.value ? new Date(e.target.value).toISOString() : null })}
-                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white"
+                    value={toDateTimeLocalValue(form.settings.eventDate)}
+                    onChange={event =>
+                      updateSettings({ eventDate: fromDateTimeLocalValue(event.target.value) })
+                    }
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs"
                   />
                 </div>
 

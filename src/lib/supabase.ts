@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { getErrorMessage } from '../utils/errors';
 
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
 const supabaseAnonKey = (
@@ -38,7 +39,7 @@ export const checkSupabaseConnection = async (): Promise<{ ok: boolean; message:
       return { ok: false, message: `Database error: ${error.message}` };
     }
     return { ok: true, message: 'Successfully connected to Supabase PostgreSQL database!' };
-  } catch (err: any) {
-    return { ok: false, message: err?.message || 'Network error connecting to Supabase' };
+  } catch (error) {
+    return { ok: false, message: getErrorMessage(error, 'Network error connecting to Supabase') };
   }
 };

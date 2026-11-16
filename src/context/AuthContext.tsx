@@ -52,12 +52,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const refreshUser = useCallback(async () => {
-    if (isSupabaseLive && supabase) {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        await fetchSupabaseProfile(session.user.id, session.user.email || '');
-      }
-    }
+    if (!isSupabaseLive || !supabase) return;
+
+    const {
+      data: { session },
+      error
+    } = await supabase.auth.getSession();
+    if (error) throw error;
+    if (!session?.user) throw new Error('Your session has expired. Sign in again to refresh your profile.');
+
+    await fetchSupabaseProfile(session.user.id, session.user.email || '');
   }, [isSupabaseLive, fetchSupabaseProfile]);
 
   useEffect(() => {
@@ -94,6 +98,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
         if (!mounted) return;
+        clearTimeout(safetyTimer);
         if (session?.user) {
           window.clearTimeout(profileLoadTimer);
           profileLoadTimer = window.setTimeout(() => {
@@ -177,7 +182,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async () => {
     if (isSupabaseLive && supabase) {
-      await supabase.auth.signOut();
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
     }
     setIsRealSession(false);
     setUser(null);

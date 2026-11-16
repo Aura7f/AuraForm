@@ -2,21 +2,23 @@ import React, { useEffect, useState } from 'react';
 import { RefreshCw, ShieldCheck, Users } from 'lucide-react';
 import { UserProfile } from '../../types';
 import { formService } from '../../services/formService';
-import { DESIGNATED_ADMIN_EMAIL } from '../../context/AuthContext';
+import { DESIGNATED_ADMIN_EMAIL, useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { getErrorMessage } from '../../utils/errors';
 
 export const MemberManagement: React.FC = () => {
   const [members, setMembers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const { showToast } = useToast();
+  const { user } = useAuth();
 
   const loadMembers = async () => {
     setLoading(true);
     try {
       setMembers(await formService.listMembers());
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to load members.', 'error');
+    } catch (error) {
+      showToast(getErrorMessage(error, 'Failed to load members.'), 'error');
     } finally {
       setLoading(false);
     }
@@ -32,8 +34,8 @@ export const MemberManagement: React.FC = () => {
       await formService.setMemberRole(member.id, role);
       setMembers(current => current.map(item => item.id === member.id ? { ...item, role } : item));
       showToast(`${member.fullName} is now a ${role}.`, 'success');
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to update member role.', 'error');
+    } catch (error) {
+      showToast(getErrorMessage(error, 'Failed to update member role.'), 'error');
     } finally {
       setUpdatingId(null);
     }
@@ -66,6 +68,7 @@ export const MemberManagement: React.FC = () => {
         <div className="divide-y divide-slate-100">
           {members.map(member => {
             const isDesignatedAdmin = member.email.toLowerCase() === DESIGNATED_ADMIN_EMAIL.toLowerCase();
+            const isCurrentUser = member.id === user?.id;
             return (
               <div key={member.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="min-w-0">
@@ -74,7 +77,11 @@ export const MemberManagement: React.FC = () => {
                 </div>
                 {isDesignatedAdmin ? (
                   <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase text-teal-700">
-                    <ShieldCheck className="w-3.5 h-3.5" /> Admin
+                    <ShieldCheck className="h-3.5 w-3.5" /> Admin
+                  </span>
+                ) : isCurrentUser ? (
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    {member.role} · you
                   </span>
                 ) : (
                   <select
